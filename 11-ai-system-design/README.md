@@ -2,6 +2,8 @@
 
 AI system design is now a standard interview loop stage for AI/GenAI/LLM engineer roles at frontier labs, big tech, and AI startups - usually a 45-60 minute whiteboard session like "Design a customer support agent" or "Design semantic search for our catalogue." It tests whether you can turn a fuzzy product idea into a shippable, measurable, affordable system with a model inside it. Senior candidates fail this round more often on missing evals and cost math than on missing boxes in the diagram.
 
+> **Going deeper:** this page is the crash course. For a self-study guide with derivations, worked numbers and check-yourself questions, read [deep-dive.md](deep-dive.md), then practise with the [exercises](exercises/).
+
 ## How these interviews differ from classic system design
 
 Classic system design intuitions still apply (load balancing, sharding, caching, queues), but four things change fundamentally:

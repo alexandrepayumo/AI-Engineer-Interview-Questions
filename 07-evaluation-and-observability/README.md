@@ -2,6 +2,8 @@
 
 Nothing separates senior AI engineers from prompt hobbyists faster than this topic: anyone can demo an LLM feature, but only people who have shipped one can explain how they *knew* it worked, kept working, and got better. Expect eval questions in every serious loop - as conceptual probes ("how would you evaluate this?"), as the backbone of system-design rounds, and as debugging scenarios ("quality dropped after a model update, go"). Interviewers at frontier labs, big tech, and startups all use it because eval maturity is the single best proxy for having actually operated an LLM system in production.
 
+> **Going deeper:** this page is the crash course. For a self-study guide with derivations, worked numbers and check-yourself questions, read [deep-dive.md](deep-dive.md), then practise with the [exercises](exercises/).
+
 ## Crash course
 
 ### Evals are the moat

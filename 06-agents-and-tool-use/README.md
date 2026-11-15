@@ -2,6 +2,8 @@
 
 One of the most heavily tested AI engineering topics of 2025-2026. Every frontier lab, big tech AI team, and agent startup asks about it, and it dominates system-design rounds for AI engineer, GenAI engineer, and LLM platform roles. Interviewers use it to separate people who have shipped an agent to production from people who have watched a demo - the questions probe reliability math, security, and cost engineering, not just vocabulary.
 
+> **Going deeper:** this page is the crash course. For a self-study guide with derivations, worked numbers and check-yourself questions, read [deep-dive.md](deep-dive.md), then practise with the [exercises](exercises/).
+
 ## Crash course
 
 ### Workflows vs agents

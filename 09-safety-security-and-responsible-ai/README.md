@@ -2,6 +2,8 @@
 
 Every company shipping LLM features now runs a security review, and "how would you stop prompt injection?" has become the AI-engineering equivalent of "how would you prevent SQL injection?" - except the honest answer is harder. This topic shows up in system-design rounds for AI/GenAI engineer roles, in dedicated security loops at frontier labs, and increasingly as a filter question anywhere agents touch real user data: interviewers want engineers who design for failure, not ones who believe a system prompt is a security boundary.
 
+> **Going deeper:** this page is the crash course. For a self-study guide with derivations, worked numbers and check-yourself questions, read [deep-dive.md](deep-dive.md), then practise with the [exercises](exercises/).
+
 ## Crash course
 
 ### The root cause: instructions and data share one channel

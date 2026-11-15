@@ -2,6 +2,8 @@
 
 This topic shows up in nearly every AI Engineer loop because it separates people who call APIs from people who can change model behaviour. Expect it if you're interviewing for GenAI/LLM engineer roles at frontier labs, applied ML teams at big tech, or any startup that ships custom models - interviewers use it to probe whether you know *when* to fine-tune, what it costs, and how post-training actually works under the hood.
 
+> **Going deeper:** this page is the crash course. For a self-study guide with derivations, worked numbers and check-yourself questions, read [deep-dive.md](deep-dive.md), then practise with the [exercises](exercises/).
+
 ## Crash course
 
 ### The decision framework: prompt → RAG → fine-tune

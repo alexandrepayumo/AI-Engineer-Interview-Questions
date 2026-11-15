@@ -165,21 +165,23 @@ AI questions now show up in backend, frontend, product, data, DevOps, QA, mobile
 
 Each topic has a crash-course primer (`README.md`) and a full question bank with worked, collapsible answers (`questions.md`). Work with the answer collapsed until you have tried it yourself.
 
-| # | Topic | Questions | What it covers |
-|---|-------|-----------|-----------------|
-| 01 | [ML & Deep Learning Foundations](01-ml-and-dl-foundations/) | 55 | Bias-variance, optimization, regularization, metrics, loss functions, the fundamentals a fine-tuning or evals answer is built on |
-| 02 | [LLM & Transformer Fundamentals](02-llm-fundamentals/) | 68 | Attention, positional encodings, tokenization, scaling laws, MoE, decoding, KV cache, reasoning models |
-| 03 | [Prompt Engineering & Context Engineering](03-prompt-engineering-and-context/) | 53 | Few-shot design, chain-of-thought, structured outputs, prompt caching, context rot and compaction |
-| 04 | [RAG & Retrieval](04-rag-and-retrieval/) | 62 | Chunking, embeddings, hybrid search, reranking, agentic RAG, retrieval evaluation |
-| 05 | [Fine-tuning, RLHF & Alignment](05-fine-tuning-and-alignment/) | 61 | SFT, LoRA/QLoRA, DPO/PPO/GRPO, distillation, GPU memory maths for training |
-| 06 | [Agents, Tool Use & MCP](06-agents-and-tool-use/) | 71 | Tool calling, MCP, planning patterns, multi-agent design, agent evaluation and security |
-| 07 | [Evals & Observability](07-evaluation-and-observability/) | 61 | LLM-as-judge, benchmark limits, RAG and agent evals, tracing, regression testing |
-| 08 | [Inference, Serving & Production LLM Systems](08-inference-and-production/) | 62 | Prefill vs. decode, KV cache paging, quantization, speculative decoding, cost engineering |
-| 09 | [Safety, Security & Responsible AI](09-safety-security-and-responsible-ai/) | 58 | Prompt injection, OWASP LLM Top 10, guardrails, agent security, data governance |
-| 10 | [Multimodal Models](10-multimodal/) | 43 | Vision-language architecture, diffusion, ASR/TTS, voice agents, multimodal RAG |
-| 11 | [AI System Design](11-ai-system-design/) | 10 case studies | A reusable answer framework plus eight worked case studies |
-| 12 | [Coding Challenges](12-coding-challenges/) | 19 challenges | Implement attention, BPE, sampling, KV cache, an agent loop, and more, from scratch |
-| 13 | [Interview Process & Behavioral](13-interview-process-and-behavioral/) | 45 | Loop anatomy by company type, take-homes, portfolio projects, AI-specific behavioural questions |
+Topics 01-12 also have a self-study deep dive (`deep-dive.md`) that works through the mechanisms, maths and worked numbers behind the crash course, and an `exercises/` folder with coding exercises (stubs plus tested reference solutions in `exercises/solutions/`) and pen-and-paper problems with model answers.
+
+| # | Topic | Questions | What it covers | Deep dive |
+|---|-------|-----------|-----------------|-----------|
+| 01 | [ML & Deep Learning Foundations](01-ml-and-dl-foundations/) | 55 | Bias-variance, optimization, regularization, metrics, loss functions, the fundamentals a fine-tuning or evals answer is built on | [Deep dive](01-ml-and-dl-foundations/deep-dive.md) · [Exercises](01-ml-and-dl-foundations/exercises/) |
+| 02 | [LLM & Transformer Fundamentals](02-llm-fundamentals/) | 68 | Attention, positional encodings, tokenization, scaling laws, MoE, decoding, KV cache, reasoning models | [Deep dive](02-llm-fundamentals/deep-dive.md) · [Exercises](02-llm-fundamentals/exercises/) |
+| 03 | [Prompt Engineering & Context Engineering](03-prompt-engineering-and-context/) | 53 | Few-shot design, chain-of-thought, structured outputs, prompt caching, context rot and compaction | [Deep dive](03-prompt-engineering-and-context/deep-dive.md) · [Exercises](03-prompt-engineering-and-context/exercises/) |
+| 04 | [RAG & Retrieval](04-rag-and-retrieval/) | 62 | Chunking, embeddings, hybrid search, reranking, agentic RAG, retrieval evaluation | [Deep dive](04-rag-and-retrieval/deep-dive.md) · [Exercises](04-rag-and-retrieval/exercises/) |
+| 05 | [Fine-tuning, RLHF & Alignment](05-fine-tuning-and-alignment/) | 61 | SFT, LoRA/QLoRA, DPO/PPO/GRPO, distillation, GPU memory maths for training | [Deep dive](05-fine-tuning-and-alignment/deep-dive.md) · [Exercises](05-fine-tuning-and-alignment/exercises/) |
+| 06 | [Agents, Tool Use & MCP](06-agents-and-tool-use/) | 71 | Tool calling, MCP, planning patterns, multi-agent design, agent evaluation and security | [Deep dive](06-agents-and-tool-use/deep-dive.md) · [Exercises](06-agents-and-tool-use/exercises/) |
+| 07 | [Evals & Observability](07-evaluation-and-observability/) | 61 | LLM-as-judge, benchmark limits, RAG and agent evals, tracing, regression testing | [Deep dive](07-evaluation-and-observability/deep-dive.md) · [Exercises](07-evaluation-and-observability/exercises/) |
+| 08 | [Inference, Serving & Production LLM Systems](08-inference-and-production/) | 62 | Prefill vs. decode, KV cache paging, quantization, speculative decoding, cost engineering | [Deep dive](08-inference-and-production/deep-dive.md) · [Exercises](08-inference-and-production/exercises/) |
+| 09 | [Safety, Security & Responsible AI](09-safety-security-and-responsible-ai/) | 58 | Prompt injection, OWASP LLM Top 10, guardrails, agent security, data governance | [Deep dive](09-safety-security-and-responsible-ai/deep-dive.md) · [Exercises](09-safety-security-and-responsible-ai/exercises/) |
+| 10 | [Multimodal Models](10-multimodal/) | 43 | Vision-language architecture, diffusion, ASR/TTS, voice agents, multimodal RAG | [Deep dive](10-multimodal/deep-dive.md) · [Exercises](10-multimodal/exercises/) |
+| 11 | [AI System Design](11-ai-system-design/) | 10 case studies | A reusable answer framework plus eight worked case studies | [Deep dive](11-ai-system-design/deep-dive.md) · [Exercises](11-ai-system-design/exercises/) |
+| 12 | [Coding Challenges](12-coding-challenges/) | 19 challenges | Implement attention, BPE, sampling, KV cache, an agent loop, and more, from scratch | [Deep dive](12-coding-challenges/deep-dive.md) · [Exercises](12-coding-challenges/exercises/) |
+| 13 | [Interview Process & Behavioral](13-interview-process-and-behavioral/) | 45 | Loop anatomy by company type, take-homes, portfolio projects, AI-specific behavioural questions | |
 
 ## System design case studies
 

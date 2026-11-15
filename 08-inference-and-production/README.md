@@ -2,6 +2,8 @@
 
 This is the topic that separates "I call the API" from "I can own an LLM feature in production" - and it dominates system-design rounds for AI Engineer roles at labs, big tech, and startups alike. Infra-flavoured teams will drill into KV cache maths and batching schedulers; product-flavoured teams will drill into SLOs, cost engineering, and reliability. Either way, you're expected to reason quantitatively: bytes, tokens/sec, dollars.
 
+> **Going deeper:** this page is the crash course. For a self-study guide with derivations, worked numbers and check-yourself questions, read [deep-dive.md](deep-dive.md), then practise with the [exercises](exercises/).
+
 ## Crash course
 
 ### The two phases of inference

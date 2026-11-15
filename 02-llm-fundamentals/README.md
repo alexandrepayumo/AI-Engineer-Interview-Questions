@@ -2,6 +2,8 @@
 
 This is the single most heavily tested topic in AI Engineer interviews: every frontier lab, big-tech AI team, and serious startup will probe whether you actually understand what happens inside the model you're building on, or whether you're just calling an API. Expect these questions at every level - screens use them to filter, onsites use them to calibrate depth, and system-design rounds assume this material as vocabulary. If you only have time to master one section of this repo, make it this one.
 
+> **Going deeper:** this page is the crash course. For a self-study guide with derivations, worked numbers and check-yourself questions, read [deep-dive.md](deep-dive.md), then practise with the [exercises](exercises/).
+
 ## Crash course
 
 ### The decoder-only transformer, top to bottom

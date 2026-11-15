@@ -2,6 +2,8 @@
 
 Every AI Engineer loop - frontier lab, big tech, or startup - still opens with fundamentals: interviewers use them to separate people who *operate* models from people who *understand* them. Expect these questions in phone screens, as warm-ups before system design, and as depth probes when you claim LLM experience ("you fine-tuned a model - why AdamW? why warmup?"). You don't need research-level math, but you must explain these concepts crisply and connect them to modern transformer training.
 
+> **Going deeper:** this page is the crash course. For a self-study guide with derivations, worked numbers and check-yourself questions, read [deep-dive.md](deep-dive.md), then practise with the [exercises](exercises/).
+
 ## Crash course
 
 ### Generalization: bias, variance, and the modern caveat

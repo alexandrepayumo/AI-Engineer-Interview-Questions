@@ -2,6 +2,8 @@
 
 Every AI engineer interview touches this topic because it is the highest-leverage, lowest-cost knob you control in production: most quality problems are context problems, not model problems. Expect it in product-engineering loops ("design the prompt for this feature"), agent-design rounds, and debugging exercises ("this prompt regressed - why?"). It gets asked at every level, from new-grad GenAI roles to staff agent-platform roles - what changes with seniority is whether you can talk about evals, caching economics, and context management rather than just "add few-shot examples."
 
+> **Going deeper:** this page is the crash course. For a self-study guide with derivations, worked numbers and check-yourself questions, read [deep-dive.md](deep-dive.md), then practise with the [exercises](exercises/).
+
 ## Crash course
 
 ### Roles: the prompt is an API surface

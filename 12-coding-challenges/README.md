@@ -2,6 +2,8 @@
 
 Almost every AI engineer loop now includes an "implement it from scratch" round. Interviewers use these to separate people who have *used* transformers, RAG, and agents from people who *understand* them - you can't fake your way through a causal mask or a numerically stable softmax with API knowledge. Frontier labs and serious AI startups routinely ask for attention, tokenizers, sampling, and KV caches in plain numpy; product-focused teams lean on the RAG, agent-loop, and streaming-parser variants.
 
+> **Going deeper:** this page is the crash course. For a self-study guide with derivations, worked numbers and check-yourself questions, read [deep-dive.md](deep-dive.md), then practise with the [exercises](exercises/).
+
 ## Rules of the game
 
 - **Dependencies:** `numpy` + Python stdlib only. No PyTorch, no transformers, no framework crutches. That's the point.
