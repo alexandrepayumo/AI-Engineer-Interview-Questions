@@ -35,7 +35,7 @@ Your suite has 60 examples and the new prompt scores 51 correct, the old prompt 
 
 <details><summary>Answer</summary>
 
-Rates: 51/60 = 0.85 and 46/60 = 0.767. Difference = 0.083. Standard error of each: sqrt(0.85 x 0.15 / 60) = 0.046 and sqrt(0.767 x 0.233 / 60) = 0.055. Independent difference SE = sqrt(0.046^2 + 0.055^2) = 0.072. The 95% interval is 0.083 +- 0.141, which comfortably includes zero. Only a paired analysis could rescue the claim: if, say, 9 examples flipped to correct and 4 flipped to wrong, the exact binomial test on 13 discordant pairs gives p = 0.27 (two-sided), still not significant. Five more points on 60 examples is not evidence.
+Rates: $51/60 = 0.85$ and $46/60 = 0.767$. Difference $= 0.083$. Standard error of each: $\sqrt{0.85 \times 0.15 / 60} = 0.046$ and $\sqrt{0.767 \times 0.233 / 60} = 0.055$. Independent difference $\text{SE} = \sqrt{0.046^2 + 0.055^2} = 0.072$. The 95% interval is $0.083 \pm 0.141$, which comfortably includes zero. Only a paired analysis could rescue the claim: if, say, 9 examples flipped to correct and 4 flipped to wrong, the exact binomial test on 13 discordant pairs gives $p = 0.27$ (two-sided), still not significant. Five more points on 60 examples is not evidence.
 
 </details>
 
@@ -45,7 +45,7 @@ A judge and a human label 200 answers as good or bad. Both say good on 120, both
 
 <details><summary>Answer</summary>
 
-po = (120 + 40) / 200 = 0.80. Judge good rate = 150/200 = 0.75, human good rate = 130/200 = 0.65. pe = 0.75 x 0.65 + 0.25 x 0.35 = 0.4875 + 0.0875 = 0.575. kappa = (0.80 - 0.575) / (1 - 0.575) = 0.529, "moderate" agreement. The errors are lopsided: the judge passes 30 answers that humans reject versus 10 the other way, so it is lenient. Before using it, look at those 30 cases, tighten the rubric, and re-measure. For gating, a lenient judge is the dangerous direction.
+$p_o = (120 + 40) / 200 = 0.80$. Judge good rate $= 150/200 = 0.75$, human good rate $= 130/200 = 0.65$. $p_e = 0.75 \times 0.65 + 0.25 \times 0.35 = 0.4875 + 0.0875 = 0.575$. $\kappa = (0.80 - 0.575) / (1 - 0.575) = 0.529$, \"moderate\" agreement. The errors are lopsided: the judge passes 30 answers that humans reject versus 10 the other way, so it is lenient. Before using it, look at those 30 cases, tighten the rubric, and re-measure. For gating, a lenient judge is the dangerous direction.
 
 </details>
 
@@ -55,7 +55,13 @@ Judge sensitivity (passes answers humans pass) is 0.90 and specificity (fails an
 
 <details><summary>Answer</summary>
 
-observed = p x sens + (1 - p) x (1 - spec), so p = (observed - (1 - spec)) / (sens + spec - 1) = (0.70 - 0.20) / 0.70 = 0.714. The correction is small here but grows as specificity drops. The calibration estimates have their own error, so the corrected rate needs a wider interval than the raw one. Corrections only hold if the production distribution resembles the calibration set.
+$$\text{observed} = p \cdot \text{sens} + (1 - p)(1 - \text{spec})$$
+
+so
+
+$$p = \frac{\text{observed} - (1 - \text{spec})}{\text{sens} + \text{spec} - 1} = \frac{0.70 - 0.20}{0.70} = 0.714$$
+
+The correction is small here but grows as specificity drops. The calibration estimates have their own error, so the corrected rate needs a wider interval than the raw one. Corrections only hold if the production distribution resembles the calibration set.
 
 </details>
 
@@ -85,7 +91,7 @@ For one route over a day you see p50 = 1.4 s, p95 = 4.8 s, p99 = 14 s, with 200,
 
 <details><summary>Answer</summary>
 
-About 1% of 200,000, so ~2,000 requests above 14 s. For 5 sequential calls: 1 - 0.99^5 = 4.9%, so about 1 agent run in 20 contains a 14 s call, close to the single-call p95 rate. Tail latency compounds across fan-out and sequential steps, so alert on p95 and p99 per route and on the end-to-end task latency distribution, not on the mean or p50.
+About 1% of 200,000, so ~2,000 requests above 14 s. For 5 sequential calls: $1 - 0.99^5 = 0.049$, or 4.9%, so about 1 agent run in 20 contains a 14 s call, close to the single-call p95 rate. Tail latency compounds across fan-out and sequential steps, so alert on p95 and p99 per route and on the end-to-end task latency distribution, not on the mean or p50.
 
 </details>
 
@@ -95,7 +101,7 @@ A weekly check of a judge-score histogram against the launch week gives expected
 
 <details><summary>Answer</summary>
 
-Terms (a - e) x ln(a / e): bin 1: -0.05 x ln(0.5) = 0.0347. Bin 2: -0.10 x ln(0.5) = 0.0693. Bin 3: -0.05 x ln(0.875) = 0.0067. Bin 4: 0.10 x ln(1.5) = 0.0405. Bin 5: 0.10 x ln(2) = 0.0693. PSI = 0.2205, "moderate" (0.1 to 0.25). Scores moved upward. The score shift is a symptom with three possible causes: input mix changed (check intent distribution), the model or prompt changed (check version tags in traces), or the judge changed. Pull a sample of high-score and low-score traces, read them, and re-run the golden set against the current configuration to separate real quality change from a shifted input mix.
+Terms $(a - e) \ln(a / e)$: bin 1: $-0.05 \ln 0.5 = 0.0347$. Bin 2: $-0.10 \ln 0.5 = 0.0693$. Bin 3: $-0.05 \ln 0.875 = 0.0067$. Bin 4: $0.10 \ln 1.5 = 0.0405$. Bin 5: $0.10 \ln 2 = 0.0693$. $\text{PSI} = 0.2205$, "moderate" (0.1 to 0.25). Scores moved upward. The score shift is a symptom with three possible causes: input mix changed (check intent distribution), the model or prompt changed (check version tags in traces), or the judge changed. Pull a sample of high-score and low-score traces, read them, and re-run the golden set against the current configuration to separate real quality change from a shifted input mix.
 
 </details>
 
@@ -121,10 +127,10 @@ A vendor reports +4 points on a public coding benchmark for a new model. List fo
 
 ### P10. Spotting a broken A/B test
 
-An A/B test with 50/50 allocation reports 10,400 users in control and 9,600 in treatment. The treatment shows a 2% lift on task completion with p = 0.03. Do you ship?
+An A/B test with 50/50 allocation reports 10,400 users in control and 9,600 in treatment. The treatment shows a 2% lift on task completion with $p = 0.03$. Do you ship?
 
 <details><summary>Answer</summary>
 
-No. The sample ratio is off: with 20,000 users the expected split is 10,000 each, and 400 over gives chi-square = 400^2 / 10,000 + 400^2 / 10,000 = 32 (p well below 0.001). A sample ratio mismatch means assignment or logging is broken, for example treatment users dropping out of logging when the new variant errors or is slow. The lift cannot be trusted until the cause is found. Fix the pipeline, rerun, and always run an SRM check before reading metrics.
+No. The sample ratio is off: with 20,000 users the expected split is 10,000 each, and 400 over gives $\chi^2 = 400^2 / 10{,}000 + 400^2 / 10{,}000 = 32$ ($p$ well below 0.001). A sample ratio mismatch means assignment or logging is broken, for example treatment users dropping out of logging when the new variant errors or is slow. The lift cannot be trusted until the cause is found. Fix the pipeline, rerun, and always run an SRM check before reading metrics.
 
 </details>

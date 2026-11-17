@@ -142,17 +142,19 @@ Classic capacity planning counts requests and bytes. AI systems have a third res
 
 ### The chain
 
-```
-requests/day  = DAU x requests per user per day
-average QPS   = requests/day / 86,400
-peak QPS      = average QPS x peak-to-average factor (2-5, use 3 if unknown)
-tokens/day    = requests/day x (input tokens + output tokens)
-cost/request  = in_tokens x price_in + out_tokens x price_out   (prices per token)
-monthly cost  = requests/day x cost/request x 30
-GPUs          = (peak QPS x in_tokens / prefill_tps + peak QPS x out_tokens / decode_tps) / utilisation
+```math
+\begin{aligned}
+\text{requests/day} &= \text{DAU} \times \text{requests per user per day} \\
+\text{average QPS} &= \text{requests/day} \,/\, 86{,}400 \\
+\text{peak QPS} &= \text{average QPS} \times \text{peak-to-average factor} && \text{(2 to 5, use 3 if unknown)} \\
+\text{tokens/day} &= \text{requests/day} \times (\text{input tokens} + \text{output tokens}) \\
+\text{cost/request} &= \text{in\_tokens} \times \text{price\_in} + \text{out\_tokens} \times \text{price\_out} && \text{(prices per token)} \\
+\text{monthly cost} &= \text{requests/day} \times \text{cost/request} \times 30 \\
+\text{GPUs} &= \frac{\text{peak QPS} \times \text{in\_tokens} / \text{prefill\_tps} + \text{peak QPS} \times \text{out\_tokens} / \text{decode\_tps}}{\text{utilisation}}
+\end{aligned}
 ```
 
-Round liberally. 86,400 is 10^5 for estimating. The goal is the order of magnitude and the dominant term.
+Round liberally. 86,400 is $10^5$ for estimating. The goal is the order of magnitude and the dominant term.
 
 ### Worked example: a support assistant
 
@@ -162,59 +164,75 @@ Assumptions, stated aloud:
 - 3,000 input tokens per request (system prompt 600, retrieved context 1,800, history and question 600) and 400 output tokens.
 - Peak is 3x the average.
 
-```
-average QPS = 1,000,000 / 86,400  = 11.6
-peak QPS    = 11.6 x 3            = 34.7
-input tokens/day  = 1,000,000 x 3,000 = 3.0 billion
-output tokens/day = 1,000,000 x   400 = 0.4 billion
+```math
+\begin{aligned}
+\text{average QPS} &= 1{,}000{,}000 / 86{,}400 = 11.6 \\
+\text{peak QPS} &= 11.6 \times 3 = 34.7 \\
+\text{input tokens/day} &= 1{,}000{,}000 \times 3{,}000 = 3.0 \text{ billion} \\
+\text{output tokens/day} &= 1{,}000{,}000 \times 400 = 0.4 \text{ billion}
+\end{aligned}
 ```
 
-Now price it with two hypothetical price points (use stated assumptions, not current list prices): a frontier tier at $3 per million input tokens and $15 per million output tokens, and a small tier at $0.15 and $0.60.
+Now price it with two hypothetical price points (use stated assumptions, not current list prices): a frontier tier at \$3 per million input tokens and \$15 per million output tokens, and a small tier at \$0.15 and \$0.60.
 
-```
-frontier: 3,000 x 3/1e6 + 400 x 15/1e6 = 0.009 + 0.006 = $0.015 per request
-          monthly = 1,000,000 x 0.015 x 30 = $450,000
-small:    3,000 x 0.15/1e6 + 400 x 0.60/1e6 = 0.00045 + 0.00024 = $0.00069 per request
-          monthly = 1,000,000 x 0.00069 x 30 = $20,700
+```math
+\begin{aligned}
+\text{frontier:}\quad & 3{,}000 \times \frac{3}{10^6} + 400 \times \frac{15}{10^6} = 0.009 + 0.006 = \$0.015 \text{ per request} \\
+& \text{monthly} = 1{,}000{,}000 \times 0.015 \times 30 = \$450{,}000 \\
+\text{small:}\quad & 3{,}000 \times \frac{0.15}{10^6} + 400 \times \frac{0.60}{10^6} = 0.00045 + 0.00024 = \$0.00069 \text{ per request} \\
+& \text{monthly} = 1{,}000{,}000 \times 0.00069 \times 30 = \$20{,}700
+\end{aligned}
 ```
 
 Three observations an interviewer will reward. The frontier tier is about 22x the small tier. Output is 40% of the frontier cost though it is 12% of the tokens (400 of 3,400), because output tokens are priced several times higher. And the input is mostly stable: a 600-token system prompt plus tool definitions repeat on every call, which prompt caching can discount.
 
-Prompt caching: if 2,400 of the 3,000 input tokens are a shared, byte-stable prefix billed at 10% of the input price, the frontier request costs 600 x 3 + 2,400 x 0.3 + 400 x 15 = 1,800 + 720 + 6,000 = 8,520 micro-dollars, or $0.00852, a 43% reduction. The ceiling on the saving is set by the output cost, which caching does not touch.
+Prompt caching: if 2,400 of the 3,000 input tokens are a shared, byte-stable prefix billed at 10% of the input price, the frontier request costs (in micro-dollars, using prices per million tokens):
+
+```math
+600 \times 3 + 2{,}400 \times 0.3 + 400 \times 15 = 1{,}800 + 720 + 6{,}000 = 8{,}520 \text{ micro-dollars} = \$0.00852
+```
+
+That is a 43% reduction. The ceiling on the saving is set by the output cost, which caching does not touch.
 
 ### GPU sizing for self-hosting
 
 Self-hosting converts a per-token price into a per-GPU-hour price. Prefill (processing the prompt) is compute-bound and fast per token. Decode (generating tokens) is memory-bandwidth-bound and slower per token, but a GPU serves many sequences at once with continuous batching. Assume, for a mid-size model on one accelerator, an aggregate 20,000 prefill tokens per second and 2,500 decode tokens per second. These are illustrative. Measure your own.
 
-```
-prefill load = 34.7 x 3,000 / 20,000 = 5.21 GPU
-decode load  = 34.7 x   400 /  2,500 = 5.56 GPU
-total        = 10.76 GPU at 100% utilisation
-at 60% target utilisation: 10.76 / 0.6 = 17.9, so 18 GPUs
+```math
+\begin{aligned}
+\text{prefill load} &= 34.7 \times 3{,}000 / 20{,}000 = 5.21 \text{ GPU} \\
+\text{decode load} &= 34.7 \times 400 / 2{,}500 = 5.56 \text{ GPU} \\
+\text{total} &= 10.76 \text{ GPU at 100\% utilisation} \\
+\text{at 60\% target utilisation:}\quad & 10.76 / 0.6 = 17.9, \text{ so 18 GPUs}
+\end{aligned}
 ```
 
-Never run at 100%: queueing delay grows sharply as utilisation approaches 1, and you need headroom for failures, so also never fewer than two replicas. At an assumed $2.50 per GPU-hour, 18 GPUs cost 18 x 2.50 x 730 = $32,850 per month. The hosted small model above costs $20,700 for the same traffic. Self-hosting is not cheaper at this scale. It pays when volume is several times higher, utilisation is high and steady, or data cannot leave your network. [Exercise 01](exercises/ex01_capacity_estimator.py) encodes this chain.
+Never run at 100%: queueing delay grows sharply as utilisation approaches 1, and you need headroom for failures, so also never fewer than two replicas. At an assumed \$2.50 per GPU-hour, 18 GPUs cost $18 \times 2.50 \times 730$ = \$32,850 per month. The hosted small model above costs \$20,700 for the same traffic. Self-hosting is not cheaper at this scale. It pays when volume is several times higher, utilisation is high and steady, or data cannot leave your network. [Exercise 01](exercises/ex01_capacity_estimator.py) encodes this chain.
 
 ### Worked example: storage for embeddings
 
 A corpus of 10 million documents averaging 8 chunks each is 80 million vectors. At 1,024 dimensions and 4 bytes per dimension (float32):
 
-```
-raw = 80,000,000 x 1,024 x 4 = 327.7 GB
-float16: 163.8 GB    int8: 81.9 GB    PQ at 64 bytes/vector: 5.1 GB (plus codebooks)
+```math
+\begin{aligned}
+\text{raw} &= 80{,}000{,}000 \times 1{,}024 \times 4 = 327.7 \text{ GB} \\
+\text{float16} &= 163.8 \text{ GB}, \quad \text{int8} = 81.9 \text{ GB}, \quad \text{PQ at 64 bytes/vector} = 5.1 \text{ GB (plus codebooks)}
+\end{aligned}
 ```
 
-An HNSW graph with M = 16 adds about 2 x 16 x 4 = 128 bytes per vector for layer-0 links, so +10.2 GB, about 3% at 1,024 dimensions but 50% at 64 dimensions. Dividing by usable RAM per node (say 128 GB x 0.7 = 89.6 GB) gives the shard count: 338 GB / 89.6 = 3.8, so 4 shards, 8 nodes with two replicas. One-time embedding cost at an assumed $0.02 per million tokens: 80M chunks x 400 tokens = 32 billion tokens = $640. Ingestion is cheap. Serving the index from RAM is the recurring cost. See [exercise 06](exercises/ex06_index_sizing.py) and Part 4 of the [RAG deep dive](../04-rag-and-retrieval/deep-dive.md).
+An HNSW graph with $M = 16$ adds about $2 \times 16 \times 4 = 128$ bytes per vector for layer-0 links, so +10.2 GB, about 3% at 1,024 dimensions but 50% at 64 dimensions. Dividing by usable RAM per node (say $128 \times 0.7 = 89.6$ GB) gives the shard count: $338 / 89.6 = 3.8$, so 4 shards, 8 nodes with two replicas. One-time embedding cost at an assumed \$0.02 per million tokens: $80\text{M chunks} \times 400 \text{ tokens} = 32$ billion tokens, or \$640. Ingestion is cheap. Serving the index from RAM is the recurring cost. See [exercise 06](exercises/ex06_index_sizing.py) and Part 4 of the [RAG deep dive](../04-rag-and-retrieval/deep-dive.md).
 
 ### Worked example: an agent loop
 
 Agent cost is not linear in steps because every step resends the history. Suppose a 4,000-token fixed prefix, 1,000 new tokens per step, 10 steps.
 
-```
-input tokens, no cache = 10 x 4,000 + 1,000 x (0+1+...+9) = 40,000 + 45,000 = 85,000
-with prefix caching: new tokens = 4,000 + 9 x 1,000 = 13,000 at full price
-                     cached reads = 72,000 at 10% = 7,200 equivalents
-                     total = 20,200 equivalents, 4.2x cheaper
+```math
+\begin{aligned}
+\text{input tokens, no cache} &= 10 \times 4{,}000 + 1{,}000 \times (0+1+\dots+9) = 40{,}000 + 45{,}000 = 85{,}000 \\
+\text{with prefix caching: new tokens} &= 4{,}000 + 9 \times 1{,}000 = 13{,}000 \text{ at full price} \\
+\text{cached reads} &= 72{,}000 \text{ at 10\%} = 7{,}200 \text{ equivalents} \\
+\text{total} &= 20{,}200 \text{ equivalents, 4.2x cheaper}
+\end{aligned}
 ```
 
 Quadratic growth in history is why step caps, context compaction and cheap models for intermediate steps are cost controls, not polish. See [../06-agents-and-tool-use/deep-dive.md](../06-agents-and-tool-use/deep-dive.md).
@@ -223,7 +241,7 @@ Quadratic growth in history is why step caps, context compaction and cheap model
 
 - Using the average instead of the peak for capacity.
 - Counting only user text and forgetting the system prompt, tool schemas, retrieved context and history, which usually dominate the input.
-- Quoting a precise answer from imprecise inputs. Say "about $450k a month, 10x either way, driven by output tokens."
+- Quoting a precise answer from imprecise inputs. Say "about \$450k a month, 10x either way, driven by output tokens."
 
 ### Check yourself
 
@@ -231,7 +249,19 @@ Quadratic growth in history is why step caps, context compaction and cheap model
 
 <details><summary>Answer</summary>
 
-Requests per day = 200,000. Average QPS = 200,000 / 86,400 = 2.3. Daily input tokens = 200,000 x 2,000 = 400 million. Daily output tokens = 200,000 x 250 = 50 million. At a peak factor of 3, peak QPS is about 7.
+Requests per day = 200,000. Average QPS:
+
+$$200{,}000 / 86{,}400 = 2.3$$
+
+Daily input tokens:
+
+$$200{,}000 \times 2{,}000 = 400 \text{ million}$$
+
+Daily output tokens:
+
+$$200{,}000 \times 250 = 50 \text{ million}$$
+
+At a peak factor of 3, peak QPS is about 7.
 
 </details>
 
@@ -239,7 +269,15 @@ Requests per day = 200,000. Average QPS = 200,000 / 86,400 = 2.3. Daily input to
 
 <details><summary>Answer</summary>
 
-Halving output saves 200 x 15 / 1e6 = $0.003 per request. Halving input saves 1,500 x 3 / 1e6 = $0.0045 per request. Halving input saves more here because there are 7.5x more input tokens, which outweighs the 5x price gap. If the ratio were 800 input and 400 output tokens, output reduction would win. Always compute both.
+Halving output saves \$0.003 per request:
+
+$$200 \times \frac{15}{10^6} = 0.003$$
+
+Halving input saves \$0.0045 per request:
+
+$$1{,}500 \times \frac{3}{10^6} = 0.0045$$
+
+Halving input saves more here because there are 7.5x more input tokens, which outweighs the 5x price gap. If the ratio were 800 input and 400 output tokens, output reduction would win. Always compute both.
 
 </details>
 
@@ -247,7 +285,7 @@ Halving output saves 200 x 15 / 1e6 = $0.003 per request. Halving input saves 1,
 
 <details><summary>Answer</summary>
 
-11 is the 100%-utilisation figure (10.76 rounded up). At that utilisation, requests queue without bound whenever load fluctuates. Dividing by a 60% target gives 17.9, rounded up to 18. The headroom absorbs bursts and node failures, and you need at least N+1 so one node loss does not drop capacity below peak.
+11 is the 100%-utilisation figure (10.76 rounded up). At that utilisation, requests queue without bound whenever load fluctuates. Dividing by a 60% target gives $10.76 / 0.6 = 17.9$, rounded up to 18. The headroom absorbs bursts and node failures, and you need at least $N+1$ so one node loss does not drop capacity below peak.
 
 </details>
 
@@ -279,7 +317,7 @@ Notice that most mitigations are classic distributed-systems ideas (budgets, ide
 
 A gateway is the single place where provider credentials, quotas, retries, failover, metering and policy live. It exists because the alternative, every service calling providers directly, makes each of those concerns a copy-paste bug and gives you no way to change model or provider without touching ten services. The minimum interface is small:
 
-```
+```text
 POST /v1/complete  {tenant, task, messages, max_tokens, idempotency_key, tags}
 -> stream of tokens + final {model_used, tokens_in, tokens_out, cost, trace_id}
 ```
@@ -300,13 +338,19 @@ Three caches, in order of safety:
 2. **Exact response cache** keyed on a hash of the normalised input plus model, prompt version and tenant. Safe when the answer should be deterministic and the key includes everything the answer depends on.
 3. **Semantic cache** returns a stored answer for a query whose embedding is close enough. It can serve a wrong answer. Two queries "How do I cancel my order?" and "How do I cancel my subscription?" are close in embedding space and have different answers.
 
-The cost model for the semantic tier matters. Each non-exact lookup pays an embedding call, and each hit saves a model call. With exact hit rate e, semantic hit rate s, embedding cost c_e and model cost c_m:
+The cost model for the semantic tier matters. Each non-exact lookup pays an embedding call, and each hit saves a model call. With exact hit rate $e$, semantic hit rate $s$, embedding cost $c_e$ and model cost $c_m$:
 
-```
-expected cost = (1 - e) x c_e + (1 - e - s) x c_m
+```math
+\mathbb{E}[\text{cost}] = (1 - e)\, c_e + (1 - e - s)\, c_m
 ```
 
-With e = 10%, s = 20%, c_e = $0.0001 and c_m = $0.015: 0.9 x 0.0001 + 0.7 x 0.015 = $0.01059, a 29% saving. If 1% of semantic hits are wrong, 0.2% of all traffic receives a wrong answer from the cache. Whether that is acceptable depends on the domain. For a refund-policy answer it is not. For a "summarise this public page" request it may be. Treat the similarity threshold as a precision knob that you set from labelled query pairs, and keep the cache keyed on tenant and permission scope. [Exercise 04](exercises/ex04_tiered_cache.py) simulates the tradeoff.
+With $e$ at 10%, $s$ at 20%, $c_e$ at \$0.0001 and $c_m$ at \$0.015:
+
+```math
+0.9 \times 0.0001 + 0.7 \times 0.015 = \$0.01059
+```
+
+That is a 29% saving. If 1% of semantic hits are wrong, 0.2% of all traffic receives a wrong answer from the cache. Whether that is acceptable depends on the domain. For a refund-policy answer it is not. For a "summarise this public page" request it may be. Treat the similarity threshold as a precision knob that you set from labelled query pairs, and keep the cache keyed on tenant and permission scope. [Exercise 04](exercises/ex04_tiered_cache.py) simulates the tradeoff.
 
 ### Queues and async jobs
 
@@ -330,7 +374,15 @@ Two tenants can ask the same question and be entitled to different answers, beca
 
 <details><summary>Answer</summary>
 
-Cascade: every request pays 1, the 40% escalated also pay 20, so 1 + 0.4 x 20 = 9 units. A router that decided before calling any model would pay 0.6 x 1 + 0.4 x 20 = 8.6 units, a small saving, but it must predict difficulty without seeing the output, which is usually less accurate than using the small model's own confidence. When the small model is cheap relative to the large one, the extra small call is a minor cost.
+Cascade: every request pays 1, the 40% escalated also pay 20, so:
+
+$$1 + 0.4 \times 20 = 9 \text{ units}$$
+
+A router that decided before calling any model would pay:
+
+$$0.6 \times 1 + 0.4 \times 20 = 8.6 \text{ units}$$
+
+That is a small saving, but it must predict difficulty without seeing the output, which is usually less accurate than using the small model's own confidence. When the small model is cheap relative to the large one, the extra small call is a minor cost.
 
 </details>
 
@@ -381,7 +433,7 @@ Worked budget for a RAG chat with a 1,500 ms p95 TTFT target:
 | Slack | 200 | |
 | **Total on the critical path** | **1,500** | |
 
-Check: 50 + 60 + 60 + 200 + 30 + 800 + 100 = 1,300, plus 200 slack = 1,500. The input guard takes 150 ms but overlaps retrieval (320 ms), so it costs nothing on the critical path. If the guard grew to 400 ms it would become the critical path, so the budget table has to be re-derived when any stage changes. [Exercise 03](exercises/ex03_latency_budget.py) computes the critical path of a DAG.
+Check: $50 + 60 + 60 + 200 + 30 + 800 + 100 = 1{,}300$, plus 200 slack = 1,500. The input guard takes 150 ms but overlaps retrieval (320 ms), so it costs nothing on the critical path. If the guard grew to 400 ms it would become the critical path, so the budget table has to be re-derived when any stage changes. [Exercise 03](exercises/ex03_latency_budget.py) computes the critical path of a DAG.
 
 ```mermaid
 flowchart LR
@@ -394,15 +446,21 @@ flowchart LR
     E --> F["LLM first token 800"]
 ```
 
-The longest path is gateway, embed, retrieve, rerank, build, LLM: 50 + 60 + 60 + 200 + 30 + 800 = 1,200 ms, plus 100 network gives 1,300.
+The longest path is gateway, embed, retrieve, rerank, build, LLM: $50 + 60 + 60 + 200 + 30 + 800 = 1{,}200$ ms, plus 100 network gives 1,300.
 
 ### Percentiles do not add
 
 Per-stage p95 budgets do not compose into an end-to-end p95. Two effects work in opposite directions.
 
-**Stages in series.** For independent stages the tail of the sum is lighter than the sum of the tails, because it is unlikely that every stage is slow at once. Take four stages, each lognormal with median 100 ms and sigma 0.5. Each has a p95 of 100 x exp(0.5 x 1.645) = 227 ms. The sum of the four p95s is 910 ms. Simulating the sum gives a p95 of about 670 ms (median about 437 ms). Adding p95s over-budgets the chain by roughly a third, so budgeting each stage at its own p95 wastes headroom.
+**Stages in series.** For independent stages the tail of the sum is lighter than the sum of the tails, because it is unlikely that every stage is slow at once. Take four stages, each lognormal with median 100 ms and $\sigma = 0.5$. Each has a p95 of
 
-**Stages in parallel (fan-out).** Waiting for the slowest of k calls makes the tail worse. If each of k parallel calls has a 5% chance of exceeding its p95, the chance that at least one does is 1 - 0.95^k. For k = 10 that is 40%, so the p95 of the fan-out is far above the per-call p95. In the same simulation with median 100 ms and sigma 0.5, the fan-out p95 is about 227 ms for k = 1, 305 ms for k = 4 and 391 ms for k = 16. This is why multi-query retrieval, multi-tool agents and map-reduce summarisation have worse tails than their components suggest. The countermeasures are timeouts with partial results (return what arrived by the deadline), hedged requests (send a duplicate after the p95 delay and take the first answer, costing about 5% extra load for a large p99 improvement), and capping fan-out.
+```math
+100 \times \exp(0.5 \times 1.645) = 227 \text{ ms}
+```
+
+The sum of the four p95s is 910 ms. Simulating the sum gives a p95 of about 670 ms (median about 437 ms). Adding p95s over-budgets the chain by roughly a third, so budgeting each stage at its own p95 wastes headroom.
+
+**Stages in parallel (fan-out).** Waiting for the slowest of $k$ calls makes the tail worse. If each of $k$ parallel calls has a 5% chance of exceeding its p95, the chance that at least one does is $1 - 0.95^k$. For $k = 10$ that is 40%, so the p95 of the fan-out is far above the per-call p95. In the same simulation with median 100 ms and $\sigma = 0.5$, the fan-out p95 is about 227 ms for $k = 1$, 305 ms for $k = 4$ and 391 ms for $k = 16$. This is why multi-query retrieval, multi-tool agents and map-reduce summarisation have worse tails than their components suggest. The countermeasures are timeouts with partial results (return what arrived by the deadline), hedged requests (send a duplicate after the p95 delay and take the first answer, costing about 5% extra load for a large p99 improvement), and capping fan-out.
 
 Exercise 03 reproduces both numbers with a seeded Monte Carlo.
 
@@ -432,7 +490,11 @@ No. For independent stages it is usually lower, in the example above about 25-30
 
 <details><summary>Answer</summary>
 
-Each call is slower than 2 s with probability 1%. The chance at least one of 8 is slow is 1 - 0.99^8 = 7.7%. So roughly 8% of steps wait 2 s or more, though each call alone breaches that only 1% of the time. Use per-call deadlines and accept partial results.
+Each call is slower than 2 s with probability 1%. The chance at least one of 8 is slow is
+
+$$1 - 0.99^8 = 0.077$$
+
+That is 7.7%. So roughly 8% of steps wait 2 s or more, though each call alone breaches that only 1% of the time. Use per-call deadlines and accept partial results.
 
 </details>
 
@@ -462,16 +524,16 @@ The interview-ready habit is to start from the cost breakdown, find the dominant
 
 ### Cascades and routing: the arithmetic
 
-Using the support example, small tier $0.00069 per request, frontier $0.015. Suppose confidence scoring lets the small model keep 60% of traffic. A cascade pays the small call for everyone and the frontier call for the escalated 40%:
+Using the support example, small tier \$0.00069 per request, frontier \$0.015. Suppose confidence scoring lets the small model keep 60% of traffic. A cascade pays the small call for everyone and the frontier call for the escalated 40%:
 
-```
-cost = 0.00069 + 0.40 x 0.015 = 0.00669 per request   (0.446 of frontier-only, 55% cheaper)
+```math
+\text{cost} = 0.00069 + 0.40 \times 0.015 = \$0.00669 \text{ per request} \quad \text{(0.446 of frontier-only, 55\% cheaper)}
 ```
 
 Quality is where cascades get dishonest if you do not measure. Say the small model is 95% correct on the requests it keeps (they are the easy ones), and the frontier model is 88% correct on the escalated requests (they are the hard ones), while frontier-only is 92% on everything:
 
-```
-cascade quality = 0.60 x 0.95 + 0.40 x 0.88 = 0.570 + 0.352 = 0.922
+```math
+\text{cascade quality} = 0.60 \times 0.95 + 0.40 \times 0.88 = 0.570 + 0.352 = 0.922
 ```
 
 The cascade matches the frontier tier at 45% of the cost, which is the best case. The best case needs a confidence signal that separates right from wrong. If the signal is random, the quality of the cascade falls on the straight line between the all-small and all-large endpoints, and you pay for the mix without the benefit. The test is a sweep over thresholds on a labelled set, which [exercise 02](exercises/ex02_cascade_router.py) builds, and the decision rule is: choose the cheapest threshold whose quality is at least the target, with a confidence interval wide enough to be honest about the small sample.
@@ -480,42 +542,62 @@ Where does the confidence signal come from? Options, from cheap to strong: token
 
 ### Caching: stacked savings
 
-Semantic and exact caches act on the whole request. Applying them first and the cascade to the remaining misses, with the earlier numbers (exact 10%, semantic 20%, embedding $0.0001, cascade cost $0.00669 for misses):
+Semantic and exact caches act on the whole request. Applying them first and the cascade to the remaining misses, with the earlier numbers (exact 10%, semantic 20%, embedding \$0.0001, cascade cost \$0.00669 for misses):
 
-```
-cost per query = 0.9 x 0.0001 + 0.7 x 0.00669 = 0.00009 + 0.004683 = $0.004773
-monthly (1M requests/day x 30) = $143,190   versus $450,000 baseline, a 68% reduction
+```math
+\begin{aligned}
+\text{cost per query} &= 0.9 \times 0.0001 + 0.7 \times 0.00669 = 0.00009 + 0.004683 = \$0.004773 \\
+\text{monthly (1M requests/day} \times 30\text{)} &= \$143{,}190 \quad \text{versus \$450,000 baseline, a 68\% reduction}
+\end{aligned}
 ```
 
 Each step is a measured hit rate or escalation rate, not a hope. Show the stack as a table and give a range, because hit rates depend on how repetitive the traffic is. A support assistant has far more repetition than an open-ended research tool.
 
 ### Prompt caching and context discipline
 
-Input tokens dominate agents, RAG and long-document tools. Order the prompt so the shared part is first and stable (system prompt, tool definitions, policy text), then retrieved documents, history and the question. Budget tokens by section, for example 600 for instructions, 1,800 for evidence, 600 for history. Retrieval top-k is a cost lever as well as a quality lever: going from 10 chunks of 400 tokens to 5 saves 2,000 tokens per request, which at $3 per million input tokens and 1 million requests per day is $180,000 per month. Measure the recall cost of lowering k against it, and check how your provider prices cache writes and expiry.
+Input tokens dominate agents, RAG and long-document tools. Order the prompt so the shared part is first and stable (system prompt, tool definitions, policy text), then retrieved documents, history and the question. Budget tokens by section, for example 600 for instructions, 1,800 for evidence, 600 for history. Retrieval top-k is a cost lever as well as a quality lever: going from 10 chunks of 400 tokens to 5 saves 2,000 tokens per request, which at \$3 per million input tokens and 1 million requests per day is \$180,000 per month. Measure the recall cost of lowering k against it, and check how your provider prices cache writes and expiry.
 
 ### Batching and offline work
 
-Two different ideas. Continuous batching in serving raises GPU throughput by decoding many sequences together, which is why 2,500 tokens per second per GPU in Part 2 is an aggregate. Batch APIs for offline jobs accept relaxed deadlines (often hours) at a discount, commonly around half the interactive price (~, check current terms). Use them for enrichment, bulk classification, evaluation runs and backfills. For 500 million documents at 800 tokens and $0.15 per million input tokens, one pass is $60,000, so a cheap first-pass filter that removes half the documents saves $30,000 before any batch discount. See exercise D3 in [exercises/README.md](exercises/README.md).
+Two different ideas. Continuous batching in serving raises GPU throughput by decoding many sequences together, which is why 2,500 tokens per second per GPU in Part 2 is an aggregate. Batch APIs for offline jobs accept relaxed deadlines (often hours) at a discount, commonly around half the interactive price (~, check current terms). Use them for enrichment, bulk classification, evaluation runs and backfills. For 500 million documents at 800 tokens and \$0.15 per million input tokens, one pass is \$60,000, so a cheap first-pass filter that removes half the documents saves \$30,000 before any batch discount. See exercise D3 in [exercises/README.md](exercises/README.md).
 
 ### Build versus buy
 
-Self-host when data cannot leave your boundary, volume is steady enough to keep GPUs above about 50-60% utilisation, or you need a fine-tuned model or latency control an API cannot give. Use an API when traffic is spiky, you are early, or you need a frontier capability. Part 2 shows the break-even: 18 GPUs at $32,850 per month against $20,700 for a hosted small tier, before on-call and evaluation costs. Many mature systems use an API for the frontier tier and self-host a high-volume small tier.
+Self-host when data cannot leave your boundary, volume is steady enough to keep GPUs above about 50-60% utilisation, or you need a fine-tuned model or latency control an API cannot give. Use an API when traffic is spiky, you are early, or you need a frontier capability. Part 2 shows the break-even: 18 GPUs at \$32,850 per month against \$20,700 for a hosted small tier, before on-call and evaluation costs. Many mature systems use an API for the frontier tier and self-host a high-volume small tier.
 
 ### Check yourself
 
-1. The cascade accepts 70% at the small tier ($1 per 1,000 requests) and escalates 30% to a large tier ($20 per 1,000). What is the cost per 1,000 requests?
+1. The cascade accepts 70% at the small tier (\$1 per 1,000 requests) and escalates 30% to a large tier (\$20 per 1,000). What is the cost per 1,000 requests?
 
 <details><summary>Answer</summary>
 
-Every request pays the small call: $1. The escalated 30% also pay the large call: 0.3 x $20 = $6. Total $7 per 1,000, 65% below the $20 large-only cost. A router that skipped the small call on escalated requests would pay 0.7 x 1 + 0.3 x 20 = $6.70.
+Every request pays the small call: \$1. The escalated 30% also pay the large call, \$6:
+
+$$0.3 \times 20 = 6$$
+
+Total \$7 per 1,000, 65% below the \$20 large-only cost. A router that skipped the small call on escalated requests would pay \$6.70:
+
+$$0.7 \times 1 + 0.3 \times 20 = 6.70$$
 
 </details>
 
-2. Retrieval top-k drops from 8 to 4 chunks of 500 tokens. Input price is $2 per million tokens, 2 million requests per day. Monthly saving?
+2. Retrieval top-k drops from 8 to 4 chunks of 500 tokens. Input price is \$2 per million tokens, 2 million requests per day. Monthly saving?
 
 <details><summary>Answer</summary>
 
-Tokens saved per request = 4 x 500 = 2,000. Dollars per request = 2,000 x 2 / 1e6 = $0.004. Per day = 2,000,000 x 0.004 = $8,000. Per month (30 days) = $240,000. Before banking that, measure recall@4 versus recall@8 and answer quality, because a quality drop can cost more than the saving.
+Tokens saved per request:
+
+$$4 \times 500 = 2{,}000$$
+
+Dollars per request, per day and per month (30 days):
+
+$$2{,}000 \times \frac{2}{10^6} = 0.004$$
+
+$$2{,}000{,}000 \times 0.004 = 8{,}000$$
+
+$$8{,}000 \times 30 = 240{,}000$$
+
+So the saving is \$0.004 per request, \$8,000 per day and \$240,000 per month. Before banking that, measure recall@4 versus recall@8 and answer quality, because a quality drop can cost more than the saving.
 
 </details>
 
@@ -538,7 +620,22 @@ The model provider is a remote dependency with its own outages, rate limits, lat
 
 ### Availability arithmetic
 
-Serial dependencies multiply. If the gateway is 99.95% available, retrieval 99.9% and the model provider 99.5%, a request that needs all three succeeds with probability 0.9995 x 0.999 x 0.995 = 99.35%, about 4.7 hours of failure per month (0.0065 x 730 hours). The provider term dominates. A second, independent provider at 99.5% gives the model hop 1 - 0.005^2 = 99.9975%, and the chain rises to 0.9985 x 0.999975 = 99.85%, roughly 1.1 hours per month. Two honest caveats. Providers are not fully independent, since they share cloud regions and sometimes the same upstream. And the fallback model is a different model with different behaviour, so you must have evaluated it (and its prompt) before the outage, not during it.
+Serial dependencies multiply. If the gateway is 99.95% available, retrieval 99.9% and the model provider 99.5%, a request that needs all three succeeds with probability
+
+```math
+0.9995 \times 0.999 \times 0.995 = 0.9935
+```
+
+That is 99.35%, about 4.7 hours of failure per month ($0.0065 \times 730$ hours). The provider term dominates. A second, independent provider at 99.5% gives the model hop availability
+
+```math
+\begin{aligned}
+1 - 0.005^2 &= 0.999975 && \text{(99.9975\%)} \\
+0.9985 \times 0.999975 &= 0.99848 && \text{(chain availability, 99.85\%)}
+\end{aligned}
+```
+
+so the chain rises to 99.85%, roughly 1.1 hours per month. Two honest caveats. Providers are not fully independent, since they share cloud regions and sometimes the same upstream. And the fallback model is a different model with different behaviour, so you must have evaluated it (and its prompt) before the outage, not during it.
 
 ### Retries, budgets and idempotency
 
@@ -550,11 +647,11 @@ Retries are safe only for idempotent operations. A model call is idempotent in e
 
 Provider limits are expressed in tokens per minute and requests per minute. Compute the quota you need before you pick a tier. Using the support example, peak load is 34.7 requests per second at 3,400 tokens each:
 
-```
-34.7 x 3,400 = 118,000 tokens/s = 7.1 million tokens/min at peak
+```math
+34.7 \times 3{,}400 = 118{,}000 \text{ tokens/s} = 7.1 \text{ million tokens/min at peak}
 ```
 
-If your account tier is 2 million tokens per minute you will be throttled once traffic passes about 28% of peak (2 / 7.1). The fixes are a higher quota negotiated in advance, a second provider or region, a cheaper tier for part of the traffic, and shedding or queueing load. Design the gateway to enforce limits in tokens with a token bucket per tenant and per priority class, to reserve a share of quota for interactive traffic (for example 70%) so that batch jobs cannot consume it, and to return a clear 429 with a retry-after header instead of queueing without bound. A fair scheduler across tenants (weighted fair queueing) stops one tenant's burst from taking the shared pool. [Exercise 05](exercises/ex05_fair_scheduler.py) builds a token bucket and a weighted fair queue.
+If your account tier is 2 million tokens per minute you will be throttled once traffic passes about 28% of peak (2 divided by 7.1). The fixes are a higher quota negotiated in advance, a second provider or region, a cheaper tier for part of the traffic, and shedding or queueing load. Design the gateway to enforce limits in tokens with a token bucket per tenant and per priority class, to reserve a share of quota for interactive traffic (for example 70%) so that batch jobs cannot consume it, and to return a clear 429 with a retry-after header instead of queueing without bound. A fair scheduler across tenants (weighted fair queueing) stops one tenant's burst from taking the shared pool. [Exercise 05](exercises/ex05_fair_scheduler.py) builds a token bucket and a weighted fair queue.
 
 ### The degradation ladder
 
@@ -587,7 +684,9 @@ Clients retry the failed requests, so the struggling provider receives a multipl
 
 <details><summary>Answer</summary>
 
-1 - 0.01 x 0.01 = 99.99%. The assumption is independence, and the second assumption is that the fallback provider can carry the full load at acceptable quality, which needs reserved quota and an evaluated prompt. If both rely on the same region or upstream, the real figure is lower.
+$$1 - 0.01 \times 0.01 = 0.9999$$
+
+That is 99.99%. The assumption is independence, and the second assumption is that the fallback provider can carry the full load at acceptable quality, which needs reserved quota and an evaluated prompt. If both rely on the same region or upstream, the real figure is lower.
 
 </details>
 
@@ -614,7 +713,13 @@ A model-based product improves only if the team can measure, find failures and f
 4. **Improve**: change the prompt, retrieval, routing or model, and re-run the whole set.
 5. **Ship and monitor**: roll out with the gates from Part 8, then return to step 1.
 
-Worked sampling plan for 1 million requests per day: judge 0.1% at random (1,000 per day) with an LLM judge calibrated to humans, send about 50 per day to human review (half random, half targeted), and add the confirmed failures to the golden set weekly. A 1,000-sample daily random judge gives a pass-rate estimate with a 95% half-width of about 1.9 points when the rate is 90% (1.96 x sqrt(0.9 x 0.1 / 1000)). That is enough to see a 5-point regression within a day.
+Worked sampling plan for 1 million requests per day: judge 0.1% at random (1,000 per day) with an LLM judge calibrated to humans, send about 50 per day to human review (half random, half targeted), and add the confirmed failures to the golden set weekly. A 1,000-sample daily random judge gives a pass-rate estimate with a 95% half-width of about 1.9 points when the rate is 90%:
+
+```math
+1.96 \times \sqrt{\frac{0.9 \times 0.1}{1000}} = 0.019
+```
+
+That is enough to see a 5-point regression within a day.
 
 User feedback is a weak signal. Thumbs response rates are often a few percent, and the users who respond skew to extremes. Use it to find candidates, not to estimate quality. Implicit signals (copy, accept, edit distance, re-ask within one minute, escalation) are higher volume and less biased but need interpretation: a re-ask can mean the answer was bad or that the user wants more.
 
@@ -633,7 +738,7 @@ The key structural principle for agents is that safety cannot rest on the model 
 
 ### Permissions in retrieval: pre-filter, not post-filter
 
-In an enterprise assistant each user may see only a subset of documents. Two designs: retrieve top-k and then drop documents the user cannot see (post-filter), or apply the permission filter inside the search (pre-filter). Post-filtering has two problems. It can leak through ranking side effects and timing, and it starves the result set. If a user can see 5% of the corpus and you retrieve the top 20 by similarity, the expected number of permitted documents is 20 x 0.05 = 1, and the chance that none are permitted is 0.95^20 = 36%. The user sees an empty or thin answer for reasons that look like a retrieval bug. Pre-filtering keeps recall high at the cost of a filtered ANN search that is more complex and, with restrictive filters, slower. See [case study 1](case-studies/01-enterprise-rag-assistant.md) for ACL sync and freshness.
+In an enterprise assistant each user may see only a subset of documents. Two designs: retrieve top-k and then drop documents the user cannot see (post-filter), or apply the permission filter inside the search (pre-filter). Post-filtering has two problems. It can leak through ranking side effects and timing, and it starves the result set. If a user can see 5% of the corpus and you retrieve the top 20 by similarity, the expected number of permitted documents is $20 \times 0.05 = 1$, and the chance that none are permitted is $0.95^{20} = 0.36$, or 36%. The user sees an empty or thin answer for reasons that look like a retrieval bug. Pre-filtering keeps recall high at the cost of a filtered ANN search that is more complex and, with restrictive filters, slower. See [case study 1](case-studies/01-enterprise-rag-assistant.md) for ACL sync and freshness.
 
 ### Multi-tenancy tiers
 
@@ -652,7 +757,15 @@ Whatever the tier, test isolation: a suite that runs queries as tenant A designe
 
 <details><summary>Answer</summary>
 
-Expected permitted = 50 x 0.02 = 1. The probability of none, assuming independence, is 0.98^50 = 36%. Pre-filter by permission, or use a tenant and group-aware index, so the top-k are all visible to the user.
+Expected permitted:
+
+$$50 \times 0.02 = 1$$
+
+The probability of none, assuming independence, is 36%:
+
+$$0.98^{50} = 0.36$$
+
+Pre-filter by permission, or use a tenant and group-aware index, so the top-k are all visible to the user.
 
 </details>
 
@@ -685,7 +798,19 @@ A usable golden set has: 100-1,000 cases drawn from real or realistic traffic, s
 
 ### How big a golden set?
 
-Sampling noise is not a detail. With n = 200 cases and a true accuracy of 90%, the 95% half-width is 1.96 x sqrt(0.9 x 0.1 / 200) = 4.2 points, so an observed gain from 90% to 93% is within the noise. To tell 90% from 93% reliably (80% power, 5% significance) you need about 16 x p(1-p) / delta^2 cases per arm for independent samples: 16 x 0.09 / 0.03^2 = 1,600 per arm. Paired comparisons on the same cases are much more sensitive (each case is its own control), so run both candidates on the same golden set and look at the per-case differences. For a quick decision on a small set, report the number of cases that flipped from pass to fail and fail to pass, and read them.
+Sampling noise is not a detail. With $n = 200$ cases and a true accuracy of 90%, the 95% half-width is
+
+```math
+1.96 \times \sqrt{\frac{0.9 \times 0.1}{200}} = 0.042 = 4.2 \text{ points}
+```
+
+so an observed gain from 90% to 93% is within the noise. To tell 90% from 93% reliably (80% power, 5% significance) you need about $16 \cdot p(1-p) / \delta^2$ cases per arm for independent samples:
+
+```math
+\frac{16 \times 0.09}{0.03^2} = 1{,}600 \text{ per arm}
+```
+
+Paired comparisons on the same cases are much more sensitive (each case is its own control), so run both candidates on the same golden set and look at the per-case differences. For a quick decision on a small set, report the number of cases that flipped from pass to fail and fail to pass, and read them.
 
 ### Judges need evals too
 
@@ -700,7 +825,19 @@ The pipeline:
 3. **Canary.** Send 1% of traffic, then 5%, 25% and 100%, with a soak period at each step and automatic rollback on guardrail breach (error rate, p95 latency, cost per request, refusal rate, escalation rate, negative-feedback rate).
 4. **A/B test.** For a product-level claim ("the new retrieval raises resolution rate"), randomise by user, run to a pre-computed sample size, and read the guardrails too.
 
-Sample-size worked example. A canary at 1% of 1 million requests per day is 10,000 requests per day. To detect an error rate rising from 2.5% to 3.5% (delta 0.01, p near 0.03) you need about 16 x 0.03 x 0.97 / 0.0001 = 4,700 per arm, which 10,000 canary requests satisfy in a day. For an outcome metric such as resolution rate near 0.30 with a target lift of 2 points, you need about 16 x 0.21 / 0.0004 = 8,400 per arm. A product with 5,000 requests per day needs weeks for that test, so choose a more sensitive proxy or accept a larger minimum effect.
+Sample-size worked example. A canary at 1% of 1 million requests per day is 10,000 requests per day. To detect an error rate rising from 2.5% to 3.5% ($\delta = 0.01$, $p$ near 0.03) you need about 4,700 per arm, which 10,000 canary requests satisfy in a day:
+
+```math
+\frac{16 \times 0.03 \times 0.97}{0.0001} \approx 4{,}700 \text{ per arm}
+```
+
+For an outcome metric such as resolution rate near 0.30 with a target lift of 2 points, you need about 8,400 per arm:
+
+```math
+\frac{16 \times 0.21}{0.0004} = 8{,}400 \text{ per arm}
+```
+
+A product with 5,000 requests per day needs weeks for that test, so choose a more sensitive proxy or accept a larger minimum effect.
 
 Offline wins do not always translate online. The golden set is a sample of past traffic, the judge is imperfect, and users adapt. So the online test is the final arbiter for product claims, and offline evals are the gate that stops you shipping known regressions.
 
@@ -760,7 +897,7 @@ When you meet a new prompt, ask which row it most resembles, borrow that row's h
 
 ### A worked mini-design in five minutes
 
-Prompt: "Design a search assistant for a 10,000-employee company's internal wiki." Assume 30% of staff use it daily at 4 questions each: 12,000 queries per day, 0.14 QPS average, about 2 at peak. At 4,000 input and 300 output tokens on a frontier tier ($3 and $15 per million) a query costs 0.012 + 0.0045 = $0.0165, so $198 per day or about $6,000 per month. The corpus (200,000 documents x 6 chunks = 1.2 million vectors at 1,024 float32 dimensions) is 4.9 GB. The numbers say: managed services, no GPUs, no semantic cache yet, hybrid retrieval with a permission pre-filter, one cited prompt with streaming, and a golden set from real questions before launch. The estimate took one minute and removed most of the architecture a candidate might have drawn.
+Prompt: "Design a search assistant for a 10,000-employee company's internal wiki." Assume 30% of staff use it daily at 4 questions each: 12,000 queries per day, 0.14 QPS average, about 2 at peak. At 4,000 input and 300 output tokens on a frontier tier (\$3 and \$15 per million) a query costs $0.012 + 0.0045 = 0.0165$ dollars, so \$198 per day or about \$6,000 per month. The corpus ($200{,}000 \text{ documents} \times 6 \text{ chunks} = 1.2$ million vectors at 1,024 float32 dimensions) is 4.9 GB. The numbers say: managed services, no GPUs, no semantic cache yet, hybrid retrieval with a permission pre-filter, one cited prompt with streaming, and a golden set from real questions before launch. The estimate took one minute and removed most of the architecture a candidate might have drawn.
 
 ### How interviewers score
 

@@ -37,7 +37,17 @@ Design an assistant that reads a sales team's inbound email, labels and prioriti
 
 **Clarify and size.** 500 sellers, 80 inbound emails each per day: 40,000 emails per day, 0.46 QPS average. Latency: triage within a minute (async), draft ready when the seller opens the thread. Quality bar: 90% correct labels on a 500-email golden set, 60% of drafts sent with light edits, zero unapproved sends. Constraint: emails contain customer data and are untrusted input.
 
-**Numbers.** About 1,500 input tokens (thread plus CRM facts) and 300 output per email. On a small tier at $0.15 and $0.60 per million: 1,500 x 0.15/1e6 + 300 x 0.6/1e6 = $0.000405 per email, $16 per day. Drafting on a frontier tier ($3 and $15) for the 25% of emails needing a reply: 0.0045 + 0.0045 = $0.009 each, 10,000 x 0.009 = $90 per day. Total about $3,200 per month. Cost is not the constraint. Trust is.
+**Numbers.** About 1,500 input tokens (thread plus CRM facts) and 300 output per email. On a small tier at \$0.15 and \$0.60 per million, an email costs \$0.000405, so \$16 per day:
+
+$$1{,}500 \times \frac{0.15}{10^6} + 300 \times \frac{0.6}{10^6} = 0.000405$$
+
+Drafting on a frontier tier (\$3 and \$15) for the 25% of emails needing a reply costs \$0.009 each, or \$90 per day:
+
+$$0.0045 + 0.0045 = 0.009$$
+
+$$10{,}000 \times 0.009 = 90$$
+
+Total about \$3,200 per month. Cost is not the constraint. Trust is.
 
 **Design.** An event-driven pipeline: mailbox webhook, queue, classifier (small model, fixed label set, schema output), CRM retrieval for account context, drafting step for reply-needed classes, draft stored in the mail client as a draft, never sent. Notes are written to the CRM through a validated tool call with idempotency keys.
 
@@ -57,9 +67,23 @@ Design a service that sends each user a daily digest summarising about 10 articl
 
 **Clarify.** 10M users, one digest per user per day, delivered by 07:00 local time, so generation is a batch job, not a request path. About 50,000 unique articles per day. Quality: summaries faithful to the source (zero invented claims), personalisation measured by open and read-through rate.
 
-**The key insight is sharing.** Summarise per article, not per user. 50,000 articles x (1,500 input + 150 output tokens) on a small tier ($0.15 and $0.60 per million) = 50,000 x $0.000315 = $15.75 per day. Personalisation is then selection and ordering from user and article embeddings, which is cheap vector math.
+**The key insight is sharing.** Summarise per article, not per user. Each of 50,000 articles takes 1,500 input and 150 output tokens on a small tier (\$0.15 and \$0.60 per million), \$0.000315 per article, so \$15.75 per day:
 
-**What per-user generation would cost.** A per-user LLM call with 10 summaries (1,500 in, 200 out) is $0.000345 each, 10M x 0.000345 = $3,450 per day, about $103,000 per month. Delivered inside 4 hours it needs 10M / 14,400 s = 694 digests per second and 694 x 1,700 tokens = 1.2 million tokens per second of capacity. That is a large cluster for little gain over template assembly. Use per-user generation only where it earns its cost, for example a one-line personalised intro for the 10% most engaged users.
+$$50{,}000 \times 0.000315 = 15.75$$
+
+Personalisation is then selection and ordering from user and article embeddings, which is cheap vector math.
+
+**What per-user generation would cost.** A per-user LLM call with 10 summaries (1,500 in, 200 out) is \$0.000345 each, so \$3,450 per day, about \$103,000 per month:
+
+$$10\text{M} \times 0.000345 = 3{,}450$$
+
+Delivered inside 4 hours it needs 694 digests per second and 1.2 million tokens per second of capacity:
+
+$$10\text{M} / 14{,}400 \text{ s} = 694 \text{ digests/s}$$
+
+$$694 \times 1{,}700 \text{ tokens} = 1.2 \text{ million tokens/s}$$
+
+That is a large cluster for little gain over template assembly. Use per-user generation only where it earns its cost, for example a one-line personalised intro for the 10% most engaged users.
 
 **Design.** Ingestion with dedupe (near-duplicate clustering), per-article summary job with faithfulness check (a second pass or entailment model verifies each sentence against the source), embedding job, candidate generation and ranking per user in a batch job, template digest assembly, send queue with idempotent delivery.
 
@@ -77,9 +101,15 @@ Design a one-off batch pipeline that assigns each of 500 million documents to a 
 
 **Clarify.** Average 800 tokens per document, no hard deadline but 4-6 weeks is the budget, accuracy bar 92% on a labelled set, results must be auditable and re-runnable when the taxonomy changes.
 
-**Naive cost.** A small-tier model at $0.15 input and $0.60 output per million: input 500M x 800 = 400B tokens = $60,000. Output 500M x 30 tokens = 15B = $9,000. Total about $69,000 for one pass, $34,500 with a batch discount of about 50% (check current terms). Throughput over 7 days is 827 documents per second, about 690,000 tokens per second.
+**Naive cost.** A small-tier model at \$0.15 input and \$0.60 output per million:
 
-**Cheaper plan.** (1) Exact and near-duplicate removal: assume 30% duplicates, leaving 350M. Classify each cluster once and propagate. (2) Embed all 350M documents: 280B tokens at an assumed $0.02 per million = $5,600. (3) Label 5,000 documents (an LLM pass reviewed by humans on a sample) and train a lightweight classifier on the embeddings. (4) Route documents the classifier is confident about (say 75%) straight through. The remaining 25% (87.5M) go to the LLM at $0.000138 each = $12,075, or about $6,000 on a batch tier. Total about $11,600 against $69,000, a 6x reduction, plus a measurable accuracy per route.
+$$\text{input: } 500\text{M} \times 800 = 400\text{B tokens} \to \text{60,000 dollars}$$
+
+$$\text{output: } 500\text{M} \times 30 = 15\text{B tokens} \to \text{9,000 dollars}$$
+
+Total about \$69,000 for one pass, \$34,500 with a batch discount of about 50% (check current terms). Throughput over 7 days is 827 documents per second, about 690,000 tokens per second.
+
+**Cheaper plan.** (1) Exact and near-duplicate removal: assume 30% duplicates, leaving 350M. Classify each cluster once and propagate. (2) Embed all 350M documents: 280B tokens at an assumed \$0.02 per million = \$5,600. (3) Label 5,000 documents (an LLM pass reviewed by humans on a sample) and train a lightweight classifier on the embeddings. (4) Route documents the classifier is confident about (say 75%) straight through. The remaining 25% (87.5M) go to the LLM at \$0.000138 each = \$12,075, or about \$6,000 on a batch tier. Total about \$11,600 against \$69,000, a 6x reduction, plus a measurable accuracy per route.
 
 **Operations.** Shard by document id, checkpoint per shard, idempotent writes keyed on document id and taxonomy version, a dead-letter store for failures, a progress dashboard. Store the taxonomy version and the model version with every result so a taxonomy change reprocesses only what it affects.
 
@@ -117,7 +147,15 @@ Agents now draft most pull requests. Design the review system: high-precision fi
 
 <details><summary>Model answer outline</summary>
 
-**Clarify and size.** Suppose 30,000 pull requests per week, about 4,300 per day. Average review context: an 8,000-token diff plus 20,000 tokens of surrounding code and conventions, 1,500 tokens of output. On a frontier tier ($3 and $15 per million), one pass costs 28,000 x 3/1e6 + 1,500 x 15/1e6 = 0.084 + 0.0225 = $0.1065. Three specialised passes (correctness, security, conventions) cost about $0.32 per PR, 4,300 x 0.32 = $1,370 per day, about $41,000 per month. That is small next to engineering salaries, so the constraint is precision and trust, not cost.
+**Clarify and size.** Suppose 30,000 pull requests per week, about 4,300 per day. Average review context: an 8,000-token diff plus 20,000 tokens of surrounding code and conventions, 1,500 tokens of output. On a frontier tier (\$3 and \$15 per million), one pass costs \$0.1065:
+
+$$28{,}000 \times \frac{3}{10^6} + 1{,}500 \times \frac{15}{10^6} = 0.084 + 0.0225 = 0.1065$$
+
+Three specialised passes (correctness, security, conventions) cost about \$0.32 per PR, so \$1,370 per day, about \$41,000 per month:
+
+$$4{,}300 \times 0.32 = 1{,}376$$
+
+That is small next to engineering salaries, so the constraint is precision and trust, not cost.
 
 **Precision first.** A review bot that posts noise is muted within a week. Target: at least 80% of posted findings are acted on (resolved or accepted), measured. Mechanisms: a verifier step that must re-derive each finding from the code (and, where possible, reproduce it by running a test or a static check), a severity threshold, a cap on comments per PR, and suppression of any rule whose acceptance rate falls below a floor.
 
@@ -139,11 +177,27 @@ Design inline, as-you-type suggestions for 2 million daily users of a document e
 
 **Clarify.** The latency target is under 500 ms to the first suggested token, suggestions are short (about 30 tokens), and users accept or ignore them. Assume 50 suggestion requests per user per day, so 100M requests per day.
 
-**Numbers.** Average QPS = 100M / 86,400 = 1,157. Peak at 3x = 3,472. Input 400 tokens (the surrounding text), output 30. On a small tier at $0.15 and $0.60: 400 x 0.15/1e6 + 30 x 0.6/1e6 = 0.00006 + 0.000018 = $0.000078 per request, $7,800 per day, about $234,000 per month.
+**Numbers.** Average QPS and peak at 3x:
 
-**Cost levers.** Debounce typing (only request after a 300 ms pause), cancel stale requests when the user keeps typing, skip requests when the cursor position makes a suggestion unlikely (mid-word edits, code blocks), and cache by exact prefix. If these remove 60% of requests, cost falls to about $94,000 per month. Prompt caching helps little because the context changes with every keystroke.
+$$100\text{M} / 86{,}400 = 1{,}157$$
 
-**Self-hosting check.** Using the Part 2 throughput figures (20,000 prefill and 2,500 decode tokens per second per GPU), the load is 3,472 x 400 / 20,000 + 3,472 x 30 / 2,500 = 69.4 + 41.7 = 111 GPUs, or 185 at 60% utilisation: 185 x $2.50 x 730 = $338,000 per month, more than the API price. A distilled small model with about 4x the throughput needs 47 GPUs (about $86,000), which is competitive with the debounced API cost and cuts latency. The decision depends on measured throughput of your own model.
+$$1{,}157 \times 3 = 3{,}472$$
+
+Input 400 tokens (the surrounding text), output 30. On a small tier at \$0.15 and \$0.60 a request costs \$0.000078, so \$7,800 per day, about \$234,000 per month:
+
+$$400 \times \frac{0.15}{10^6} + 30 \times \frac{0.6}{10^6} = 0.00006 + 0.000018 = 0.000078$$
+
+**Cost levers.** Debounce typing (only request after a 300 ms pause), cancel stale requests when the user keeps typing, skip requests when the cursor position makes a suggestion unlikely (mid-word edits, code blocks), and cache by exact prefix. If these remove 60% of requests, cost falls to about \$94,000 per month. Prompt caching helps little because the context changes with every keystroke.
+
+**Self-hosting check.** Using the Part 2 throughput figures (20,000 prefill and 2,500 decode tokens per second per GPU), the load is 111 GPUs:
+
+$$\frac{3{,}472 \times 400}{20{,}000} + \frac{3{,}472 \times 30}{2{,}500} = 69.4 + 41.7 = 111$$
+
+At 60% utilisation that is 185 GPUs, or \$338,000 per month at \$2.50 per GPU-hour, more than the API price:
+
+$$185 \times 2.50 \times 730 = 337{,}625$$
+
+A distilled small model with about 4x the throughput needs 47 GPUs (about \$86,000), which is competitive with the debounced API cost and cuts latency. The decision depends on measured throughput of your own model.
 
 **Design.** Client-side debounce and cancellation, a regional edge service, a small fast model with a streaming response, a quality filter (drop suggestions that repeat the existing text or are too short), a feature flag per user. Privacy: document text is sensitive, so state retention (none) and a no-training policy.
 
@@ -161,7 +215,11 @@ Design an assistant that investigates security alerts and recommends a dispositi
 
 **Clarify and size.** 50,000 alerts per day, 0.58 per second, asynchronous. Most are benign. Goals: reduce analyst time per alert, never miss a true incident, give an auditable reason. The assistant recommends and does not take response actions in v1.
 
-**Cost.** An investigation uses about 15,000 input and 800 output tokens across several tool calls. At frontier pricing ($3 and $15 per million) that is 0.045 + 0.012 = $0.057 per alert, $2,850 per day for all alerts. A rules prefilter closes 70% of obvious benign alerts (known scanners, known maintenance windows), leaving 15,000 for the LLM: $855 per day, about $25,650 per month.
+**Cost.** An investigation uses about 15,000 input and 800 output tokens across several tool calls. At frontier pricing (\$3 and \$15 per million) that is \$0.057 per alert, \$2,850 per day for all alerts:
+
+$$15{,}000 \times \frac{3}{10^6} + 800 \times \frac{15}{10^6} = 0.045 + 0.012 = 0.057$$
+
+A rules prefilter closes 70% of obvious benign alerts (known scanners, known maintenance windows), leaving 15,000 for the LLM: \$855 per day, about \$25,650 per month.
 
 **Design.** Alert queue, enrichment tools (asset inventory, identity, threat intelligence, recent related alerts) exposed read-only, an investigation agent with a step cap and a fixed output schema (disposition, evidence list with links, confidence, recommended next step), and an analyst UI that shows the evidence and the trace. Low confidence and high-severity cases go straight to a human.
 
@@ -181,7 +239,11 @@ Design a pipeline that translates a product's UI strings and help articles into 
 
 **Clarify and size.** 2 million new or changed source words per month. Output is 60M translated words, about 78M tokens (1.3 tokens per word, with a language-dependent factor). Languages differ in resource level, so quality will differ too. Quality bar: no meaning errors in UI strings that appear on payment or legal screens, a bounded error rate elsewhere.
 
-**Cost comparison.** Model cost: roughly 78M output tokens plus a similar number of input tokens with glossary context on a frontier tier ($3 and $15 per million): 78 x 15 + 78 x 3 = $1,404 per month. Human review at an assumed $0.08 per word on 1% of 60M words (600,000 words) is $48,000 per month. The human review cost is about 30x the model cost, so the design question is where to spend review, not how to save tokens.
+**Cost comparison.** Model cost: roughly 78M output tokens plus a similar number of input tokens with glossary context on a frontier tier (\$3 and \$15 per million), \$1,404 per month:
+
+$$78 \times 15 + 78 \times 3 = 1{,}404$$
+
+Human review at an assumed \$0.08 per word on 1% of 60M words (600,000 words) is \$48,000 per month. The human review cost is about 30x the model cost, so the design question is where to spend review, not how to save tokens.
 
 **Design.** Segment the source (preserve placeholders, markup, plural forms), retrieve glossary and translation memory (approved past translations) as context, translate with a prompt that includes style rules, validate mechanically (placeholders preserved, length limits for UI, glossary terms present), run a second-pass check or back-translation to flag meaning drift, and route by risk tier: legal and payment strings get full human review, help articles get sampled review, low-visibility strings ship on automated checks.
 
@@ -222,16 +284,24 @@ Product wants 99.9% availability for an AI summarisation feature. Your only prov
 
 **Define availability.** Decide what counts as success: a summary returned within 10 seconds, or any useful response including a degraded one. The target is far easier if a cached or extractive summary counts as success with a visible notice. Agree this with product first.
 
-**Budget.** 99.9% allows about 44 minutes of failure per month (0.001 x 730 hours = 0.73 hours). A single 99.5% provider allows 3.65 hours, so you are about 5x over budget.
+**Budget.** 99.9% allows about 44 minutes of failure per month:
+
+$$0.001 \times 730 \text{ hours} = 0.73 \text{ hours}$$
+
+A single 99.5% provider allows 3.65 hours, so you are about 5x over budget.
 
 **Layers.**
 
-1. A second provider or a second region of the same provider. With independent failures, 1 - 0.005^2 = 99.9975%, though real failures are correlated, so assume closer to 99.95%. Requirements: a pre-evaluated prompt for the fallback, reserved quota, a circuit breaker and automatic failover with health probes.
+1. A second provider or a second region of the same provider. With independent failures, $1 - 0.005^2 = 0.999975$, or 99.9975%, though real failures are correlated, so assume closer to 99.95%. Requirements: a pre-evaluated prompt for the fallback, reserved quota, a circuit breaker and automatic failover with health probes.
 2. Caching: serve a stored summary for repeated documents (exact cache keyed on content hash and prompt version). Many requests never reach the provider.
 3. A degradation rung that needs no model: an extractive summary (leading sentences, key-sentence ranking) produced locally, labelled as "quick summary".
 4. Async fallback: queue the request, return "your summary will be ready shortly", and complete it when the provider recovers.
 
-**The rest of the chain.** The gateway, queue and database also have availability. Multiply: 99.99% gateway x 99.95% storage x 99.97% model hop (with fallbacks) is about 99.91%, barely meeting the target, so each component needs its own redundancy.
+**The rest of the chain.** The gateway, queue and database also have availability. Multiply 99.99% gateway, 99.95% storage and 99.97% model hop (with fallbacks):
+
+$$0.9999 \times 0.9995 \times 0.9997 = 0.9991$$
+
+That is about 99.91%, barely meeting the target, so each component needs its own redundancy.
 
 **Prove it.** Fault-injection drills in production-like conditions (kill the primary provider, throttle to 429), synthetic probes every minute measuring the end-to-end success rate, and an error budget policy.
 
@@ -243,14 +313,14 @@ Product wants 99.9% availability for an AI summarisation feature. Your only prov
 
 Do these in under two minutes each, with only a calculator for division. Answers are in the details block.
 
-1. 3 million requests per day, 1,200 input tokens, 150 output tokens. Average QPS, daily tokens and monthly cost at $1 input and $4 output per million tokens.
+1. 3 million requests per day, 1,200 input tokens, 150 output tokens. Average QPS, daily tokens and monthly cost at \$1 input and \$4 output per million tokens.
 2. 40 million vectors at 768 dimensions in float16. Raw size, and the node count at 64 GB per node and 70% usable RAM with 2 replicas.
 3. A pipeline runs a 40 ms stage, then a 120 ms stage in parallel with a 90 ms stage, then a 300 ms stage, then a 60 ms stage. What is the critical path?
 
 <details><summary>Answers</summary>
 
-1. Average QPS = 3,000,000 / 86,400 = 34.7. Daily input tokens = 3.6 billion, output 0.45 billion. Cost per request = 1,200 x 1/1e6 + 150 x 4/1e6 = 0.0012 + 0.0006 = $0.0018. Monthly = 3,000,000 x 0.0018 x 30 = $162,000.
-2. Raw = 40M x 768 x 2 = 61.4 GB. Usable per node = 64 x 0.7 = 44.8 GB. Shards = ceil(61.4 / 44.8) = 2. With 2 replicas, 4 nodes. HNSW links would add 40M x 128 bytes = 5.1 GB, still 2 shards.
-3. The critical path is 40 + 120 + 300 + 60 = 520 ms. The 90 ms branch runs in parallel with the 120 ms stage and is off the path.
+1. Average QPS is $3{,}000{,}000 / 86{,}400 = 34.7$. Daily input tokens = 3.6 billion, output 0.45 billion. Cost per request is $1{,}200 \times 1/10^6 + 150 \times 4/10^6 = 0.0012 + 0.0006 = 0.0018$, or \$0.0018. Monthly cost is $3{,}000{,}000 \times 0.0018 \times 30 = 162{,}000$, or \$162,000.
+2. Raw size is $40\text{M} \times 768 \times 2 = 61.4$ GB. Usable per node is $64 \times 0.7 = 44.8$ GB. Shards = $\lceil 61.4 / 44.8 \rceil = 2$. With 2 replicas, 4 nodes. HNSW links would add $40\text{M} \times 128$ bytes = 5.1 GB, still 2 shards.
+3. The critical path is $40 + 120 + 300 + 60 = 520$ ms. The 90 ms branch runs in parallel with the 120 ms stage and is off the path.
 
 </details>

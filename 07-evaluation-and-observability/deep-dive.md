@@ -66,30 +66,31 @@ When a score moves between two runs, at least four things may have caused it:
 | Grader noise | The judge's verdict on a fixed output | Better rubric, fixed judge version, order swapping, repeated judging |
 | Real change | The system actually got better or worse | This is the signal you want |
 
-Example sampling and generation sampling can be separated with arithmetic. Let item i have a true pass probability q_i (the chance a fresh sample passes). The population pass rate is p = mean of q_i. Scoring each of n items once, the variance of the mean score is
+Example sampling and generation sampling can be separated with arithmetic. Let item $i$ have a true pass probability $q_i$ (the chance a fresh sample passes). The population pass rate $p$ is the mean of the $q_i$. Scoring each of $n$ items once, the variance of the mean score is
 
-```
-Var(mean) = (1/n) * [ Var_i(q_i) + E_i( q_i * (1 - q_i) ) ]
-              ^ item difficulty     ^ generation noise
-```
-
-The sum in brackets equals p(1-p), the familiar binomial variance, but the split matters.
-
-Worked example. Half the items are easy (q = 1.0) and half are hard but passable (q = 0.6). Then p = 0.8.
-
-```
-Var_i(q_i)        = 0.5*(1.0-0.8)^2 + 0.5*(0.6-0.8)^2 = 0.04
-E[q_i (1 - q_i)]  = 0.5*0 + 0.5*0.24                  = 0.12
-total             = 0.16 = 0.8 * 0.2                   (matches p(1-p))
+```math
+\operatorname{Var}(\text{mean}) = \frac{1}{n}\Big[\underbrace{\operatorname{Var}_i(q_i)}_{\text{item difficulty}} + \underbrace{\mathbb{E}_i\big[q_i(1-q_i)\big]}_{\text{generation noise}}\Big]
 ```
 
-With n = 100 and one sample per item, SE = sqrt(0.16 / 100) = 0.040. Now draw k = 5 samples per item and average them. The generation term shrinks by k:
+The sum in brackets equals $p(1-p)$, the familiar binomial variance, but the split matters.
 
-```
-Var(mean) = (1/100) * (0.04 + 0.12/5) = 0.00064   ->  SE = 0.0253
+Worked example. Half the items are easy ($q = 1.0$) and half are hard but passable ($q = 0.6$). Then $p = 0.8$.
+
+```math
+\begin{aligned}
+\operatorname{Var}_i(q_i) &= 0.5 \times (1.0-0.8)^2 + 0.5 \times (0.6-0.8)^2 = 0.04 \\
+\mathbb{E}_i\big[q_i(1-q_i)\big] &= 0.5 \times 0 + 0.5 \times 0.24 = 0.12 \\
+\text{total} &= 0.16 = 0.8 \times 0.2 && \text{(matches } p(1-p)\text{)}
+\end{aligned}
 ```
 
-The SE drops from 4.0 to 2.5 points. It cannot drop below sqrt(0.04/100) = 2.0 points however many samples you draw, because the remaining variance comes from which 100 items you picked. Only more items reduce that floor. This is the first practical rule of eval statistics: **repeat samples to average out generation noise, add items to reduce sampling noise, and know which one you are limited by.**
+With $n = 100$ and one sample per item, $\text{SE} = \sqrt{0.16/100} = 0.040$. Now draw $k = 5$ samples per item and average them. The generation term shrinks by $k$:
+
+```math
+\operatorname{Var}(\text{mean}) = \frac{1}{100}\Big(0.04 + \frac{0.12}{5}\Big) = 0.00064 \quad\Rightarrow\quad \text{SE} = 0.0253
+```
+
+The SE drops from 4.0 to 2.5 points. It cannot drop below $\sqrt{0.04/100} = 0.020$ (2.0 points) however many samples you draw, because the remaining variance comes from which 100 items you picked. Only more items reduce that floor. This is the first practical rule of eval statistics: **repeat samples to average out generation noise, add items to reduce sampling noise, and know which one you are limited by.**
 
 ### Measurement validity
 
@@ -124,7 +125,7 @@ Every arrow is a place where the measurement can drift away from the need: the s
 
 <details><summary>Answer</summary>
 
-SE = sqrt(0.8 x 0.2 / 100) = 0.04, so the 95% interval is roughly 72% to 88%. The limitation is that it treats items as independent draws from the user population and ignores that the item set was chosen by you, that several items may share a source document (clustering), and that the grader is imperfect. It describes sampling noise only.
+$\text{SE} = \sqrt{0.8 \times 0.2 / 100} = 0.04$, so the 95% interval is roughly 72% to 88%. The limitation is that it treats items as independent draws from the user population and ignores that the item set was chosen by you, that several items may share a source document (clustering), and that the grader is imperfect. It describes sampling noise only.
 
 </details>
 
@@ -132,7 +133,7 @@ SE = sqrt(0.8 x 0.2 / 100) = 0.04, so the 95% interval is roughly 72% to 88%. Th
 
 <details><summary>Answer</summary>
 
-Var = (1/100) x (0.04 + 0.12/20) = 0.00046, SE = 0.0214. Going from 5 to 20 samples moves SE only from 2.53 to 2.14 points because the item-difficulty floor of 2.0 points dominates. Spend further budget on more items.
+$\operatorname{Var} = \tfrac{1}{100} \times (0.04 + 0.12/20) = 0.00046$, $\text{SE} = 0.0214$. Going from 5 to 20 samples moves SE only from 2.53 to 2.14 points because the item-difficulty floor of 2.0 points dominates. Spend further budget on more items.
 
 </details>
 
@@ -182,7 +183,7 @@ Worked example. Three intents with traffic shares and true pass rates:
 | returns | 0.30 | 0.70 |
 | disputes | 0.10 | 0.40 |
 
-Population pass rate = 0.6 x 0.9 + 0.3 x 0.7 + 0.1 x 0.4 = 0.54 + 0.21 + 0.04 = **0.79**. If you sample 33 items from each intent and average naively, you report (0.9 + 0.7 + 0.4) / 3 = **0.667**. Neither number is wrong; they answer different questions. Report per-stratum scores for diagnosis and the traffic-weighted score for a "what users experience" headline. For product decisions where disputes are costly, add a severity weight as well.
+Population pass rate $= 0.6 \times 0.9 + 0.3 \times 0.7 + 0.1 \times 0.4 = 0.54 + 0.21 + 0.04 =$ **0.79**. If you sample 33 items from each intent and average naively, you report $(0.9 + 0.7 + 0.4) / 3 =$ **0.667**. Neither number is wrong; they answer different questions. Report per-stratum scores for diagnosis and the traffic-weighted score for a "what users experience" headline. For product decisions where disputes are costly, add a severity weight as well.
 
 **Importance and failure-driven sampling.** Oversample traces that users thumbed down, escalated, or abandoned, and traces where a cheap detector (a guardrail, a low judge score, a long tool loop) fired. These are high-value but biased; use them for finding bugs, and keep a separate random sample for estimating rates.
 
@@ -208,13 +209,13 @@ A workable protocol:
 4. Adjudicate disagreements, and fold the resolutions back into the guide as new examples.
 5. Spot-check later batches against the adjudicated set to detect drift in labeller behaviour.
 
-**Label noise caps what you can measure.** Suppose labels are wrong 10% of the time, symmetrically. A system with true accuracy 0.90 measures at 0.90 x 0.90 + 0.10 x 0.10 = 0.82. A true 0.95 system measures at 0.95 x 0.9 + 0.05 x 0.1 = 0.86. The 5-point true gap shrinks to 4 points, and every label error also adds variance. Near the ceiling you cannot separate systems until labels are cleaned. When two strong models "disagree" with the gold label on the same items, read those items: the label is often the one in error.
+**Label noise caps what you can measure.** Suppose labels are wrong 10% of the time, symmetrically. A system with true accuracy 0.90 measures at $0.90 \times 0.90 + 0.10 \times 0.10 = 0.82$. A true 0.95 system measures at $0.95 \times 0.9 + 0.05 \times 0.1 = 0.86$. The 5-point true gap shrinks to 4 points, and every label error also adds variance. Near the ceiling you cannot separate systems until labels are cleaned. When two strong models "disagree" with the gold label on the same items, read those items: the label is often the one in error.
 
 ### Coverage
 
 Coverage means the set exercises the situations the product will meet. Build a coverage matrix and look for empty cells:
 
-```
+```text
                  short   long   multi-turn   non-English   adversarial
 order status       12      4        3            2            1
 returns            10      6        5            3            2
@@ -225,12 +226,14 @@ The empty cells tell you what to add. This is also how you decide where a failur
 
 ### How many examples
 
-Start with 20-50 hard, real cases because they change decisions immediately. Sizing for a target precision follows from the standard error. For a pass rate p measured to a half-width h at 95% confidence, n = 1.96^2 x p(1-p) / h^2.
+Start with 20-50 hard, real cases because they change decisions immediately. Sizing for a target precision follows from the standard error. For a pass rate $p$ measured to a half-width $h$ at 95% confidence, $n = 1.96^2 \times p(1-p) / h^2$.
 
-```
-p = 0.8, h = 0.05:  n = 3.84 * 0.16 / 0.0025 = 246
-p = 0.8, h = 0.03:  n = 3.84 * 0.16 / 0.0009 = 683
-p = 0.8, h = 0.02:  n = 3.84 * 0.16 / 0.0004 = 1,536
+```math
+\begin{aligned}
+p = 0.8,\ h = 0.05: &\quad n = 3.84 \times 0.16 / 0.0025 = 246 \\
+p = 0.8,\ h = 0.03: &\quad n = 3.84 \times 0.16 / 0.0009 = 683 \\
+p = 0.8,\ h = 0.02: &\quad n = 3.84 \times 0.16 / 0.0004 = 1{,}536
+\end{aligned}
 ```
 
 That is for estimating one pass rate. Comparing two systems uses different formulas (Part 5) and usually needs paired designs to be affordable.
@@ -264,7 +267,7 @@ Treat the dataset like code: stored in the repo or a versioned store, changed by
 
 <details><summary>Answer</summary>
 
-It is proportional, so the unweighted mean already equals the traffic-weighted mean, but 40 items give a wide interval on the dispute stratum alone (SE about 0.08 at p = 0.5). If the dispute rate matters, oversample to e.g. 100 and reweight, or report the stratum separately.
+It is proportional, so the unweighted mean already equals the traffic-weighted mean, but 40 items give a wide interval on the dispute stratum alone ($\text{SE}$ about 0.08 at $p = 0.5$). If the dispute rate matters, oversample to e.g. 100 and reweight, or report the stratum separately.
 
 </details>
 
@@ -272,7 +275,7 @@ It is proportional, so the unweighted mean already equals the traffic-weighted m
 
 <details><summary>Answer</summary>
 
-0.97 x 0.92 + 0.03 x 0.08 = 0.8924 + 0.0024 = 0.8948, about 89.5%. The apparent ceiling is 92%, so no system can show above it, and differences among strong systems are compressed.
+$0.97 \times 0.92 + 0.03 \times 0.08 = 0.8924 + 0.0024 = 0.8948$, about 89.5%. The apparent ceiling is 92%, so no system can show above it, and differences among strong systems are compressed.
 
 </details>
 
@@ -280,7 +283,7 @@ It is proportional, so the unweighted mean already equals the traffic-weighted m
 
 <details><summary>Answer</summary>
 
-n = 3.84 x 0.21 / 0.0016 = about 505 items.
+$n = 3.84 \times 0.21 / 0.0016$, about 505 items.
 
 </details>
 
@@ -304,15 +307,17 @@ Use the cheapest grader that captures the criterion. When the answer is verifiab
 
 **Exact match (EM)** compares normalised strings. Normalisation matters as much as the comparison: lowercase, strip punctuation and articles, collapse whitespace. "The Eiffel Tower." and "eiffel tower" match after normalisation.
 
-**Token F1** treats prediction and reference as bags of tokens. Let common = the multiset intersection (each token counts as often as it appears in both).
+**Token F1** treats prediction and reference as bags of tokens. Let $\text{common}$ be the size of the multiset intersection (each token counts as often as it appears in both).
 
-```
-precision = common / len(prediction)
-recall    = common / len(reference)
-F1        = 2 * precision * recall / (precision + recall)
+```math
+\begin{aligned}
+\text{precision} &= \frac{\text{common}}{\text{len}(\text{prediction})} \\
+\text{recall} &= \frac{\text{common}}{\text{len}(\text{reference})} \\
+\text{F1} &= \frac{2 \cdot \text{precision} \cdot \text{recall}}{\text{precision} + \text{recall}}
+\end{aligned}
 ```
 
-Worked example: prediction "the cat sat on the mat", reference "a cat was on the mat". The multiset intersection is {cat, on, the, mat}: "the" appears twice in the prediction and once in the reference, so it counts once. common = 4, precision = 4/6, recall = 4/6, F1 = 0.667. EM is 0.
+Worked example: prediction "the cat sat on the mat", reference "a cat was on the mat". The multiset intersection is {cat, on, the, mat}: "the" appears twice in the prediction and once in the reference, so it counts once. $\text{common} = 4$, $\text{precision} = 4/6$, $\text{recall} = 4/6$, $\text{F1} = 0.667$. EM is 0.
 
 Failure modes: F1 rewards verbose answers that contain the gold tokens (recall rises, precision falls, but a long answer can still score decently), and ignores meaning ("not in Paris" overlaps heavily with "in Paris"). Both EM and F1 are standard for extractive QA. For free-form answers they under-credit correct paraphrases. See [../12-coding-challenges/12_eval_metrics.py](../12-coding-challenges/12_eval_metrics.py) for an implementation.
 
@@ -320,16 +325,18 @@ Failure modes: F1 rewards verbose answers that contain the gold tokens (recall r
 
 Both come from machine translation and summarisation.
 
-**BLEU** is a precision measure over n-grams. For each n from 1 to 4, compute the clipped n-gram precision: each candidate n-gram counts at most as often as it appears in the reference. Combine with a geometric mean and multiply by a brevity penalty:
+**BLEU** is a precision measure over n-grams. For each $n$ from 1 to 4, compute the clipped n-gram precision $p_n$: each candidate n-gram counts at most as often as it appears in the reference. Combine with a geometric mean and multiply by a brevity penalty:
 
-```
-BLEU = BP * exp( (1/4) * sum_{n=1..4} log p_n )
-BP   = 1 if c > r else exp(1 - r/c)          (c = candidate length, r = reference length)
+```math
+\begin{aligned}
+\text{BLEU} &= \text{BP} \cdot \exp\Big(\frac{1}{4}\sum_{n=1}^{4} \log p_n\Big) \\
+\text{BP} &= \begin{cases} 1 & \text{if } c > r \\ \exp(1 - r/c) & \text{otherwise} \end{cases} && (c = \text{candidate length},\ r = \text{reference length})
+\end{aligned}
 ```
 
 Clipping example: candidate "the the the the", reference "the cat". Unclipped unigram precision is 4/4. Clipped it is 1/4, since the reference has "the" once. Without clipping a degenerate output wins.
 
-**ROUGE** is recall-oriented. ROUGE-N is n-gram recall against the reference. ROUGE-L uses the longest common subsequence (LCS). Example: candidate "the cat sat on the mat", reference "the cat is on the mat". LCS = "the cat on the mat" = 5 tokens. P = 5/6, R = 5/6, F = 0.833.
+**ROUGE** is recall-oriented. ROUGE-N is n-gram recall against the reference. ROUGE-L uses the longest common subsequence (LCS). Example: candidate "the cat sat on the mat", reference "the cat is on the mat". LCS = "the cat on the mat" = 5 tokens. $P = 5/6$, $R = 5/6$, $F = 0.833$.
 
 The limits, which are the useful part to remember:
 
@@ -352,26 +359,30 @@ Use it for cheap near-duplicate detection, clustering failures, or as a first-pa
 
 For code, run the output against hidden tests in a sandbox with timeouts and resource limits. Hidden tests matter: visible tests invite overfitting. String similarity to a reference solution is meaningless for code.
 
-Because generation is random, a single sample per problem is a noisy estimate of whether the model can solve it. **pass@k** is the probability that at least one of k independent samples passes. Generate n >= k samples per problem, count c passing, and estimate it without bias.
+Because generation is random, a single sample per problem is a noisy estimate of whether the model can solve it. **pass@k** is the probability that at least one of $k$ independent samples passes. Generate $n \ge k$ samples per problem, count $c$ passing, and estimate it without bias.
 
-Derivation. Choose k samples uniformly at random from the n you generated. The probability that all k are failures is the number of ways to pick k from the n - c failures divided by the number of ways to pick any k:
+Derivation. Choose $k$ samples uniformly at random from the $n$ you generated. The probability that all $k$ are failures is the number of ways to pick $k$ from the $n - c$ failures divided by the number of ways to pick any $k$:
 
-```
-P(all k fail) = C(n-c, k) / C(n, k)
-pass@k        = 1 - C(n-c, k) / C(n, k)
-```
-
-This is unbiased because the k samples are a uniformly random subset of independent draws. Worked example with n = 10, c = 3:
-
-```
-pass@1 = 1 - C(7,1)/C(10,1) = 1 - 7/10   = 0.30
-pass@5 = 1 - C(7,5)/C(10,5) = 1 - 21/252 = 0.9167
-pass@8 = 1 - C(7,8)/C(10,8) = 1  (C(7,8) = 0, fewer than 8 failures)
+```math
+\begin{aligned}
+P(\text{all } k \text{ fail}) &= \binom{n-c}{k} \Big/ \binom{n}{k} \\
+\text{pass@}k &= 1 - \binom{n-c}{k} \Big/ \binom{n}{k}
+\end{aligned}
 ```
 
-The tempting shortcut is the plug-in estimate 1 - (1 - c/n)^k. For the same data it gives 1 - 0.7^5 = 0.832 at k = 5 and 1 - 0.7^10 = 0.972 at k = 10 even though 3 of the 10 samples did pass, which means pass@10 is exactly 1. The plug-in treats the observed rate as the true one and samples with replacement, ignoring what the data tells you directly. In practice the plug-in estimator is biased and noisier. Implement the unbiased version in the numerically stable product form `1 - prod(1 - k / arange(n-c+1, n+1))` to avoid huge binomials.
+This is unbiased because the $k$ samples are a uniformly random subset of independent draws. Worked example with $n = 10$, $c = 3$:
 
-**pass^k (all k succeed).** For an agent that must work every time, the useful number is the probability that k independent attempts all pass. With per-attempt success p, it is p^k. At p = 0.9: pass^1 = 0.9, pass^5 = 0.59, pass^8 = 0.43. The unbiased estimator mirrors pass@k: C(c, k) / C(n, k). With n = 10 and c = 9, pass^5 = C(9,5)/C(10,5) = 126/252 = 0.5. A 90% agent that looks fine on pass@k fails half the time when you need five consecutive successes. Always say which of the two matches the product: pass@k for "a human or a verifier picks the best attempt", pass^k for "the system must be reliable on every run".
+```math
+\begin{aligned}
+\text{pass@}1 &= 1 - \binom{7}{1} \Big/ \binom{10}{1} = 1 - 7/10 = 0.30 \\
+\text{pass@}5 &= 1 - \binom{7}{5} \Big/ \binom{10}{5} = 1 - 21/252 = 0.9167 \\
+\text{pass@}8 &= 1 - \binom{7}{8} \Big/ \binom{10}{8} = 1 && \Big(\tbinom{7}{8} = 0 \text{, fewer than 8 failures}\Big)
+\end{aligned}
+```
+
+The tempting shortcut is the plug-in estimate $1 - (1 - c/n)^k$. For the same data it gives $1 - 0.7^5 = 0.832$ at $k = 5$ and $1 - 0.7^{10} = 0.972$ at $k = 10$ even though 3 of the 10 samples did pass, which means pass@10 is exactly 1. The plug-in treats the observed rate as the true one and samples with replacement, ignoring what the data tells you directly. In practice the plug-in estimator is biased and noisier. Implement the unbiased version in the numerically stable product form `1 - prod(1 - k / arange(n-c+1, n+1))` to avoid huge binomials.
+
+**pass^k (all k succeed).** For an agent that must work every time, the useful number is the probability that $k$ independent attempts all pass. With per-attempt success $p$, it is $p^k$. At $p = 0.9$: $\text{pass}^1 = 0.9$, $\text{pass}^5 = 0.59$, $\text{pass}^8 = 0.43$. The unbiased estimator mirrors pass@k: $\tbinom{c}{k} / \tbinom{n}{k}$. With $n = 10$ and $c = 9$, $\text{pass}^5 = \tbinom{9}{5} / \tbinom{10}{5} = 126/252 = 0.5$. A 90% agent that looks fine on pass@k fails half the time when you need five consecutive successes. Always say which of the two matches the product: pass@k for "a human or a verifier picks the best attempt", $\text{pass}^k$ for "the system must be reliable on every run".
 
 ### Multiple choice
 
@@ -383,7 +394,7 @@ Multiple-choice benchmarks are graded by comparing the model's chosen letter, ei
 |---|---|
 | A label, number or ID | Exact match after normalisation |
 | Structured (JSON) | Schema validity plus field-level match |
-| Code | Execution on hidden tests, pass@k or pass^k |
+| Code | Execution on hidden tests, pass@k or $\text{pass}^k$ |
 | A short span | Token F1 plus EM |
 | Long free text with a verifiable core | Key-fact checks (does it contain fact X, assert no forbidden claim Y) |
 | Long free text, subjective | Rubric judge (Part 4) calibrated against humans |
@@ -397,11 +408,11 @@ Multiple-choice benchmarks are graded by comparing the model's chosen letter, ei
 
 ### Check yourself
 
-1. Compute pass@3 for n = 8, c = 2.
+1. Compute pass@3 for $n = 8$, $c = 2$.
 
 <details><summary>Answer</summary>
 
-1 - C(6,3)/C(8,3) = 1 - 20/56 = 0.643.
+$1 - \tbinom{6}{3} / \tbinom{8}{3} = 1 - 20/56 = 0.643$.
 
 </details>
 
@@ -417,7 +428,7 @@ Without clipping, repeating a common reference word gets perfect unigram precisi
 
 <details><summary>Answer</summary>
 
-0.95^10 = 0.599. A 95% agent fails a ten-step reliability requirement about 40% of the time. Reliability-sensitive products should report pass^k and design for retries, verification and human fallback.
+$0.95^{10} = 0.599$. A 95% agent fails a ten-step reliability requirement about 40% of the time. Reliability-sensitive products should report $\text{pass}^k$ and design for retries, verification and human fallback.
 
 </details>
 
@@ -448,7 +459,7 @@ For open-ended outputs there is no assertion to write. A judge model, given a ru
 | Output | Score or pass/fail per item | Winner per item |
 | Best for | Absolute gates, per-criterion diagnosis, CI | Choosing between two versions, ranking models |
 | Main risk | Scale drift, score compression | Position bias, verbosity bias |
-| Cost for k systems | k calls per item | k(k-1)/2 pairs, times 2 for order swap |
+| Cost for $k$ systems | $k$ calls per item | $k(k-1)/2$ pairs, times 2 for order swap |
 
 A sensible default: binary per-criterion pointwise judges for CI gates and monitoring, pairwise with order swapping for choosing between candidate changes.
 
@@ -463,13 +474,13 @@ A sensible default: binary per-criterion pointwise judges for CI gates and monit
 
 ### Known biases and how to measure each
 
-**Position bias.** The judge prefers the answer in a particular slot, often the first. Test it directly: judge every pair twice, once in each order. Let v1 be the verdict with A first and v2 the verdict with B first. A position-blind judge returns the same winner both times.
+**Position bias.** The judge prefers the answer in a particular slot, often the first. Test it directly: judge every pair twice, once in each order. Let $v_1$ be the verdict with A first and $v_2$ the verdict with B first. A position-blind judge returns the same winner both times.
 
 Measures:
 
 - **Consistency rate**: fraction of pairs where both orders pick the same winner.
 - **First-slot share**: among non-tie verdicts, how many pick the first slot. Without bias this is about 0.5.
-- **Binomial test**: is the first-slot share compatible with 0.5? With 18 non-tie verdicts of which 12 pick slot 1, the exact two-sided p-value is 2 x 31,180 / 262,144 = 0.238, so 12 of 18 does not show bias, while 18 of 18 gives p = 7.6e-6.
+- **Binomial test**: is the first-slot share compatible with 0.5? With 18 non-tie verdicts of which 12 pick slot 1, the exact two-sided p-value is $2 \times 31{,}180 / 262{,}144 = 0.238$, so 12 of 18 does not show bias, while 18 of 18 gives $p = 7.6 \times 10^{-6}$.
 
 Mitigation: run both orders and keep only consistent verdicts as wins, counting inconsistent pairs as ties or reporting them separately. The cost is discarded data and double judge calls. The consistency rate itself is a quality metric for the judge: if it is 60%, much of what the judge says is position noise. [Exercise 03](exercises/ex03_position_bias.py) implements the detector.
 
@@ -489,45 +500,49 @@ Sample 50-100 items (stratified toward the cases that matter), have trusted huma
 
 **Cohen's kappa** corrects for the agreement expected by chance given each rater's label frequencies:
 
-```
-kappa = (po - pe) / (1 - pe)
-po = observed agreement
-pe = sum over labels of P_rater1(label) * P_rater2(label)
+```math
+\begin{aligned}
+\kappa &= \frac{p_o - p_e}{1 - p_e} \\
+p_o &= \text{observed agreement} \\
+p_e &= \sum_{\text{labels } \ell} P_{\text{rater 1}}(\ell) \cdot P_{\text{rater 2}}(\ell)
+\end{aligned}
 ```
 
 Worked example. 50 items, labelled good (y) or bad (n) by the judge (rows) and a human (columns):
 
-```
+```text
               human y   human n   total
 judge y          20         5       25
 judge n          10        15       25
 total            30        20       50
 ```
 
-po = (20 + 15) / 50 = 0.70. The judge says y 50% of the time and the human 60%, so pe = 0.5 x 0.6 + 0.5 x 0.4 = 0.50. kappa = (0.70 - 0.50) / (1 - 0.50) = **0.40**. Raw agreement of 70% sounds fine; kappa of 0.4 is only moderate agreement.
+$p_o = (20 + 15) / 50 = 0.70$. The judge says y 50% of the time and the human 60%, so $p_e = 0.5 \times 0.6 + 0.5 \times 0.4 = 0.50$. $\kappa = (0.70 - 0.50) / (1 - 0.50) =$ **0.40**. Raw agreement of 70% sounds fine; kappa of 0.4 is only moderate agreement.
 
-The **prevalence effect**: 100 items, 90 both-y, 5 judge-y/human-n, 5 judge-n/human-y, 0 both-n. po = 0.90. Each rater says y 95% of the time, so pe = 0.95 x 0.95 + 0.05 x 0.05 = 0.905 and kappa = (0.90 - 0.905) / 0.095 = **-0.053**. High agreement, kappa below zero, because the judge never identifies the rare bad answers the human flags. Whenever the positive class is rare, kappa (and per-class precision and recall) tell you what percent agreement hides.
+The **prevalence effect**: 100 items, 90 both-y, 5 judge-y/human-n, 5 judge-n/human-y, 0 both-n. $p_o = 0.90$. Each rater says y 95% of the time, so $p_e = 0.95 \times 0.95 + 0.05 \times 0.05 = 0.905$ and $\kappa = (0.90 - 0.905) / 0.095 =$ **-0.053**. High agreement, kappa below zero, because the judge never identifies the rare bad answers the human flags. Whenever the positive class is rare, kappa (and per-class precision and recall) tell you what percent agreement hides.
 
 Rule-of-thumb bands for kappa (an informal convention, not a law): below 0.2 slight, 0.2-0.4 fair, 0.4-0.6 moderate, 0.6-0.8 substantial, above 0.8 almost perfect. What you need depends on the stakes. Also compare with human-human kappa on the same rubric: a judge cannot be expected to exceed the agreement between your own labellers.
 
-**Weighted kappa** is for ordinal scores (1-5). It gives partial credit to near-misses with a disagreement weight such as |i - j| / (k - 1) (linear) or its square (quadratic). A judge that is off by one point is much better than one that is off by three. [Exercise 02](exercises/ex02_cohens_kappa.py) implements both.
+**Weighted kappa** is for ordinal scores (1-5). It gives partial credit to near-misses with a disagreement weight such as $\lvert i - j \rvert / (k - 1)$ (linear) or its square (quadratic). A judge that is off by one point is much better than one that is off by three. [Exercise 02](exercises/ex02_cohens_kappa.py) implements both.
 
-**Treat the judge as a classifier.** For a pass/fail judge compute sensitivity (fraction of human-pass items the judge passes) and specificity (fraction of human-fail items the judge fails). Using the table from [exercises P2](exercises/README.md): 120 both pass, 40 both fail, 30 judge-pass/human-fail, 10 judge-fail/human-pass. Sensitivity = 120 / 130 = 0.92, specificity = 40 / 70 = 0.57. Agreement is 80%, but specificity is poor: the judge lets 43% of bad answers through. For a CI gate that is the number to worry about.
+**Treat the judge as a classifier.** For a pass/fail judge compute sensitivity (fraction of human-pass items the judge passes) and specificity (fraction of human-fail items the judge fails). Using the table from [exercises P2](exercises/README.md): 120 both pass, 40 both fail, 30 judge-pass/human-fail, 10 judge-fail/human-pass. Sensitivity $= 120 / 130 = 0.92$, specificity $= 40 / 70 = 0.57$. Agreement is 80%, but specificity is poor: the judge lets 43% of bad answers through. For a CI gate that is the number to worry about.
 
 ### Correcting a judge's aggregate
 
 When the judge has known sensitivity (se) and specificity (sp), the observed pass rate relates to the true one by
 
-```
-observed = p * se + (1 - p) * (1 - sp)
-p        = (observed - (1 - sp)) / (se + sp - 1)
+```math
+\begin{aligned}
+\text{observed} &= p \cdot \text{se} + (1 - p)(1 - \text{sp}) \\
+p &= \frac{\text{observed} - (1 - \text{sp})}{\text{se} + \text{sp} - 1}
+\end{aligned}
 ```
 
-With se = 0.90, sp = 0.80 and an observed pass rate of 0.70: p = (0.70 - 0.20) / 0.70 = 0.714. The correction is only valid if the calibration set resembles production, and se and sp are themselves estimates with error, so the corrected rate needs a wider interval. The more reliable approach to large effects is to use the judge for comparisons (the bias is similar in both arms and mostly cancels) and use human labels for absolute claims.
+With $\text{se} = 0.90$, $\text{sp} = 0.80$ and an observed pass rate of 0.70: $p = (0.70 - 0.20) / 0.70 = 0.714$. The correction is only valid if the calibration set resembles production, and $\text{se}$ and $\text{sp}$ are themselves estimates with error, so the corrected rate needs a wider interval. The more reliable approach to large effects is to use the judge for comparisons (the bias is similar in both arms and mostly cancels) and use human labels for absolute claims.
 
 ### Judge panels, repeats and cost
 
-- **Repeat** the judge at nonzero temperature and take a majority vote to reduce judge noise, at k times the cost.
+- **Repeat** the judge at nonzero temperature and take a majority vote to reduce judge noise, at $k$ times the cost.
 - **Panels** of judges from different families reduce self-preference and idiosyncratic bias. Report disagreement as an uncertainty signal and send high-disagreement items to a human.
 - **Cascade**: run a cheap code check first, a cheap judge next, and escalate only uncertain or high-stakes items to a stronger judge or human.
 - **Budget**: with 300 items, 4 criteria and 2 orders, a pairwise run is 2,400 judge calls per comparison. Budget it before designing the suite.
@@ -570,7 +585,7 @@ They are easier to calibrate (a confusion matrix against human labels), less pro
 
 <details><summary>Answer</summary>
 
-n = 50. po = (33 + 8) / 50 = 0.82. Judge y rate 0.8 and human 0.7, so pe = 0.8 x 0.7 + 0.2 x 0.3 = 0.62. kappa = (0.82 - 0.62) / 0.38 = 0.526. Check the table: judge y = 40 means judge-y/human-n = 7 and judge-n/human-y = 2; both sum correctly (33 + 7 = 40, 33 + 2 = 35, 2 + 8 = 10, 7 + 8 = 15).
+$n = 50$. $p_o = (33 + 8) / 50 = 0.82$. Judge y rate 0.8 and human 0.7, so $p_e = 0.8 \times 0.7 + 0.2 \times 0.3 = 0.62$. $\kappa = (0.82 - 0.62) / 0.38 = 0.526$. Check the table: judge y = 40 means judge-y/human-n = 7 and judge-n/human-y = 2; both sum correctly ($33 + 7 = 40$, $33 + 2 = 35$, $2 + 8 = 10$, $7 + 8 = 15$).
 
 </details>
 
@@ -584,17 +599,19 @@ An eval score is a sample mean. Report it with an interval, and compare systems 
 
 ### Standard error and intervals for one accuracy
 
-For n independent items with pass rate p:
+For $n$ independent items with pass rate $p$:
 
-```
-SE = sqrt(p (1 - p) / n)          95% interval about p +- 1.96 * SE
+```math
+\text{SE} = \sqrt{\frac{p(1-p)}{n}} \qquad \text{95\% interval} \approx p \pm 1.96 \times \text{SE}
 ```
 
-For 80 correct out of 100: SE = 0.04, interval 0.722 to 0.878. The normal interval is poor near 0 or 1 and for small n (it can exceed [0, 1]). The **Wilson interval** is better behaved:
+For 80 correct out of 100: $\text{SE} = 0.04$, interval 0.722 to 0.878. The normal interval is poor near 0 or 1 and for small n (it can exceed [0, 1]). The **Wilson interval** is better behaved:
 
-```
-centre = (p + z^2 / 2n) / (1 + z^2 / n)
-half   = z * sqrt(p(1-p)/n + z^2 / 4n^2) / (1 + z^2 / n)
+```math
+\begin{aligned}
+\text{centre} &= \frac{p + \dfrac{z^2}{2n}}{1 + \dfrac{z^2}{n}} \\
+\text{half} &= \frac{z\sqrt{\dfrac{p(1-p)}{n} + \dfrac{z^2}{4n^2}}}{1 + \dfrac{z^2}{n}}
+\end{aligned}
 ```
 
 For 80/100 it gives 0.711 to 0.867: shifted slightly toward 0.5 and asymmetric. For a suite with 20 items and 19 passing, the normal interval is 0.855 to 1.045 (impossible above 1) while Wilson gives 0.76 to 0.99.
@@ -603,10 +620,10 @@ For 80/100 it gives 0.711 to 0.867: shifted slightly toward 0.5 and asymmetric. 
 
 The bootstrap needs no formula and works for any statistic (mean, F1, a ratio, a median latency):
 
-1. Draw n items with replacement from the n observed items. This is one resample.
+1. Draw $n$ items with replacement from the $n$ observed items. This is one resample.
 2. Compute the statistic on it.
-3. Repeat B times (1,000-10,000).
-4. The 2.5th and 97.5th percentiles of the B statistics are a 95% percentile interval.
+3. Repeat $B$ times (1,000-10,000).
+4. The 2.5th and 97.5th percentiles of the $B$ statistics are a 95% percentile interval.
 
 ```python
 import numpy as np
@@ -632,50 +649,60 @@ Suppose systems A and B run on the same 200 items. Tabulate by item:
 
 A is right on 100 + 8 = 108 items, so A scores 0.54. B is right on 100 + 20 = 120 items, so B scores 0.60. The difference is +0.06.
 
-**Unpaired view.** Treat the two accuracies as independent samples. SE of each is about sqrt(0.54 x 0.46 / 200) = 0.035 and sqrt(0.6 x 0.4 / 200) = 0.0346. The SE of the difference is sqrt(0.035^2 + 0.0346^2) = 0.0492, so the 95% interval is 0.06 +- 0.096, which includes zero (z = 1.22, p about 0.22).
+**Unpaired view.** Treat the two accuracies as independent samples. SE of each is about $\sqrt{0.54 \times 0.46 / 200} = 0.035$ and $\sqrt{0.6 \times 0.4 / 200} = 0.0346$. The SE of the difference is $\sqrt{0.035^2 + 0.0346^2} = 0.0492$, so the 95% interval is $0.06 \pm 0.096$, which includes zero ($z = 1.22$, $p \approx 0.22$).
 
-**Paired view.** Only the 28 items on which the systems disagree carry information about the difference. The 100 items both get right and the 72 both get wrong cancel out. The per-item difference d has d = +1 on 20 items, -1 on 8 items, and 0 on 172. Mean d = 12/200 = 0.06. E[d^2] = 28/200 = 0.14, so Var(d) = 0.14 - 0.0036 = 0.1364 and SE = sqrt(0.1364 / 200) = 0.0261. The interval is 0.06 +- 0.051, or (0.009, 0.111). Zero is excluded.
+**Paired view.** Only the 28 items on which the systems disagree carry information about the difference. The 100 items both get right and the 72 both get wrong cancel out. The per-item difference $d$ has $d = +1$ on 20 items, $-1$ on 8 items, and 0 on 172. Mean $\bar d = 12/200 = 0.06$. $\mathbb{E}[d^2] = 28/200 = 0.14$, so $\operatorname{Var}(d) = 0.14 - 0.0036 = 0.1364$ and $\text{SE} = \sqrt{0.1364 / 200} = 0.0261$. The interval is $0.06 \pm 0.051$, or (0.009, 0.111). Zero is excluded.
 
 Same data, opposite conclusions. The shared difficulty of items inflated the unpaired variance. This is the single most useful statistical habit for eval work: **compare systems per item, not per aggregate.**
 
 Three equivalent ways to run the paired test:
 
-- **Paired bootstrap**: resample items, compute mean(b - a) each time. Result for this data (seed 0, 2,000 resamples): difference 0.06, interval (0.01, 0.115), p about 0.03. The unpaired bootstrap on the same data gives (-0.04, 0.16), p about 0.25. [Exercise 01](exercises/ex01_bootstrap_ci.py) builds both.
-- **McNemar's test** on the discordant counts b = 20 and c = 8. With continuity correction chi2 = (|20 - 8| - 1)^2 / (20 + 8) = 121/28 = 4.32, p = 0.038. The exact version is a binomial test of 20 out of 28 against 0.5, two-sided p = 0.036.
+- **Paired bootstrap**: resample items, compute $\operatorname{mean}(b - a)$ each time. Result for this data (seed 0, 2,000 resamples): difference 0.06, interval (0.01, 0.115), p about 0.03. The unpaired bootstrap on the same data gives (-0.04, 0.16), p about 0.25. [Exercise 01](exercises/ex01_bootstrap_ci.py) builds both.
+- **McNemar's test** on the discordant counts $b = 20$ and $c = 8$. With continuity correction $\chi^2 = (\lvert 20 - 8 \rvert - 1)^2 / (20 + 8) = 121/28 = 4.32$, $p = 0.038$. The exact version is a binomial test of 20 out of 28 against 0.5, two-sided $p = 0.036$.
 - **Paired t-test** on the per-item scores, appropriate for continuous scores (judge ratings, F1) with enough items.
 
 Note how only 28 of 200 items matter. If you had only 28 flips total, say 14 each way, no amount of other items would help. The power of a paired test is set by the number of discordant items.
 
 ### Sample size and power
 
-Power is the probability that a test detects a true effect of a given size. Two error rates frame it: alpha (false positive, usually 0.05) and beta (false negative; power = 1 - beta, usually 0.8).
+Power is the probability that a test detects a true effect of a given size. Two error rates frame it: $\alpha$ (false positive, usually 0.05) and $\beta$ (false negative; power $= 1 - \beta$, usually 0.8).
 
-For comparing two accuracies p1 and p2 with n items per arm (independent samples):
+For comparing two accuracies $p_1$ and $p_2$ with $n$ items per arm (independent samples):
 
-```
-n = ( z_{1-a/2} * sqrt(2 * pbar * (1 - pbar)) + z_{power} * sqrt(p1 q1 + p2 q2) )^2 / (p1 - p2)^2
-pbar = (p1 + p2) / 2,   z_{0.975} = 1.960,   z_{0.80} = 0.842
+```math
+\begin{aligned}
+n &= \frac{\Big(z_{1-\alpha/2}\sqrt{2\bar p(1-\bar p)} + z_{\text{power}}\sqrt{p_1 q_1 + p_2 q_2}\Big)^2}{(p_1 - p_2)^2} \\
+\bar p &= \frac{p_1 + p_2}{2}, \quad q_i = 1 - p_i, \quad z_{0.975} = 1.960, \quad z_{0.80} = 0.842
+\end{aligned}
 ```
 
 Worked example. Detect 80% versus 83% (a 3-point gain):
 
-```
-pbar = 0.815;  2 * pbar * (1 - pbar) = 0.3016;  sqrt = 0.5491;  * 1.960 = 1.0763
-p1 q1 + p2 q2 = 0.16 + 0.1411 = 0.3011;  sqrt = 0.5487;  * 0.842 = 0.4619
-n = (1.0763 + 0.4619)^2 / 0.03^2 = 2.366 / 0.0009 = 2,629 per arm
-```
-
-For 80% versus 87% (7 points): n = 441 per arm. Halving the effect roughly quadruples the sample, because n scales like 1 / delta^2.
-
-**Paired design.** If the systems disagree on a fraction pd of items and the true difference is delta, the paired sample size is
-
-```
-n = ( z_{1-a/2} * sqrt(pd) + z_{power} * sqrt(pd - delta^2) )^2 / delta^2
+```math
+\begin{aligned}
+\bar p = 0.815: &\quad 2\bar p(1-\bar p) = 0.3016, \quad \sqrt{0.3016} = 0.5491, \quad 0.5491 \times 1.960 = 1.0763 \\
+&\quad p_1 q_1 + p_2 q_2 = 0.16 + 0.1411 = 0.3011, \quad \sqrt{0.3011} = 0.5487, \quad 0.5487 \times 0.842 = 0.4619 \\
+&\quad n = \frac{(1.0763 + 0.4619)^2}{0.03^2} = \frac{2.366}{0.0009} = 2{,}629 \text{ per arm}
+\end{aligned}
 ```
 
-With pd = 0.10 and delta = 0.03: (1.960 x 0.3162 + 0.842 x 0.3148)^2 / 0.0009 = (0.6198 + 0.2650)^2 / 0.0009 = 0.7829 / 0.0009 = **870 items**, against 2,629 per arm (5,258 evaluations in total) for the unpaired design. Pairing buys a factor of roughly 3 per arm here, and the gain is larger when the systems are similar (small pd), which is exactly the situation in prompt tweaks.
+For 80% versus 87% (7 points): $n = 441$ per arm. Halving the effect roughly quadruples the sample, because $n$ scales like $1 / \delta^2$.
 
-**Minimum detectable effect (MDE).** Turn the question around: given n, what difference can you reliably see? Solving the power formula numerically near p = 0.8 with 80% power and unpaired samples:
+**Paired design.** If the systems disagree on a fraction $p_d$ of items and the true difference is $\delta$, the paired sample size is
+
+```math
+n = \frac{\Big(z_{1-\alpha/2}\sqrt{p_d} + z_{\text{power}}\sqrt{p_d - \delta^2}\Big)^2}{\delta^2}
+```
+
+With $p_d = 0.10$ and $\delta = 0.03$:
+
+```math
+n = \frac{(1.960 \times 0.3162 + 0.842 \times 0.3148)^2}{0.0009} = \frac{(0.6198 + 0.2650)^2}{0.0009} = \frac{0.7829}{0.0009} = 870
+```
+
+That is **870 items**, against 2,629 per arm (5,258 evaluations in total) for the unpaired design. Pairing buys a factor of roughly 3 per arm here, and the gain is larger when the systems are similar (small $p_d$), which is exactly the situation in prompt tweaks.
+
+**Minimum detectable effect (MDE).** Turn the question around: given n, what difference can you reliably see? Solving the power formula numerically near $p = 0.8$ with 80% power and unpaired samples:
 
 | Items per arm | MDE (points) |
 |---|---|
@@ -689,17 +716,17 @@ This is the sobering table. A 100-item suite cannot confirm a 5-point gain at al
 
 ### Clustered data
 
-If several items share a source (five questions per document, several turns per conversation), they are correlated, and the naive SE is too small. The design effect for clusters of size m with intra-cluster correlation rho is
+If several items share a source (five questions per document, several turns per conversation), they are correlated, and the naive SE is too small. The design effect for clusters of size $m$ with intra-cluster correlation $\rho$ is
 
-```
-DEFF = 1 + (m - 1) * rho
+```math
+\text{DEFF} = 1 + (m - 1)\rho
 ```
 
-With m = 5 questions per document and rho = 0.3, DEFF = 2.2, the variance is 2.2 times the naive value, SE is 1.48 times larger, and 500 items behave like 500 / 2.2 = 227 independent ones. Fix it by computing the standard error at the cluster level (average within each cluster first, then take the SE across clusters) or by bootstrapping clusters instead of items.
+With $m = 5$ questions per document and $\rho = 0.3$, $\text{DEFF} = 2.2$, the variance is 2.2 times the naive value, SE is 1.48 times larger, and 500 items behave like $500 / 2.2 = 227$ independent ones. Fix it by computing the standard error at the cluster level (average within each cluster first, then take the SE across clusters) or by bootstrapping clusters instead of items.
 
 ### Multiple comparisons and peeking
 
-If you test 20 variants or 20 metrics at alpha = 0.05 with no true effects, the chance of at least one false positive is 1 - 0.95^20 = 0.64. Remedies: pre-register the primary metric, apply a correction (Bonferroni uses alpha / m = 0.0025 for 20 tests), or treat the selected winner as a hypothesis to confirm on fresh data. The same logic applies to looking at a running test repeatedly (Part 7): five equally spaced looks at a nominal 5% can inflate the false-positive rate to about 14%.
+If you test 20 variants or 20 metrics at $\alpha = 0.05$ with no true effects, the chance of at least one false positive is $1 - 0.95^{20} = 0.64$. Remedies: pre-register the primary metric, apply a correction (Bonferroni uses $\alpha / m = 0.0025$ for $m = 20$ tests), or treat the selected winner as a hypothesis to confirm on fresh data. The same logic applies to looking at a running test repeatedly (Part 7): five equally spaced looks at a nominal 5% can inflate the false-positive rate to about 14%.
 
 ### Gating with intervals: non-inferiority
 
@@ -722,7 +749,7 @@ Two separate 95% intervals can overlap while the difference is still significant
 
 <details><summary>Answer</summary>
 
-Difference 0.083; unpaired SE about 0.072; the interval is roughly -0.06 to +0.22, which includes zero. Even a favourable paired split (9 items improved, 4 regressed) gives exact p = 0.27.
+Difference 0.083; unpaired SE about 0.072; the interval is roughly -0.06 to +0.22, which includes zero. Even a favourable paired split (9 items improved, 4 regressed) gives exact $p = 0.27$.
 
 </details>
 
@@ -730,7 +757,7 @@ Difference 0.083; unpaired SE about 0.072; the interval is roughly -0.06 to +0.2
 
 <details><summary>Answer</summary>
 
-Without continuity correction chi2 = (21 - 9)^2 / 30 = 4.8 (p = 0.028); with correction (|12| - 1)^2 / 30 = 4.03 (p = 0.045). The exact binomial for 21 of 30 gives p = 0.043 (two-sided). Borderline significant; the difference is 12/500 = 2.4 points.
+Without continuity correction $\chi^2 = (21 - 9)^2 / 30 = 4.8$ ($p = 0.028$); with correction $(\lvert 21 - 9 \rvert - 1)^2 / 30 = 4.03$ ($p = 0.045$). The exact binomial for 21 of 30 gives $p = 0.043$ (two-sided). Borderline significant; the difference is 12/500 = 2.4 points.
 
 </details>
 
@@ -738,7 +765,7 @@ Without continuity correction chi2 = (21 - 9)^2 / 30 = 4.8 (p = 0.028); with cor
 
 <details><summary>Answer</summary>
 
-The variance of the per-item difference is pd - delta^2, so it shrinks with pd. If the systems rarely disagree, each disagreement is informative and the total noise is small, so fewer items are needed.
+The variance of the per-item difference is $p_d - \delta^2$, so it shrinks with $p_d$. If the systems rarely disagree, each disagreement is informative and the total noise is small, so fewer items are needed.
 
 </details>
 
@@ -746,15 +773,15 @@ The variance of the per-item difference is pd - delta^2, so it shrinks with pd. 
 
 <details><summary>Answer</summary>
 
-About 2,629 x (3/2)^2 = 5,900 as a first estimate, since n scales as 1/delta^2. The exact formula for 0.80 vs 0.82 gives about 6,000 (the variance terms also change slightly with p). Either way the order of magnitude is thousands per arm, which is why you pair, cluster-correct, or demand a larger effect.
+About $2{,}629 \times (3/2)^2 \approx 5{,}900$ as a first estimate, since $n$ scales as $1/\delta^2$. The exact formula for 0.80 vs 0.82 gives about 6,000 (the variance terms also change slightly with p). Either way the order of magnitude is thousands per arm, which is why you pair, cluster-correct, or demand a larger effect.
 
 </details>
 
-5. An eval with 25 clusters of 8 items and rho = 0.5. What is the effective sample size?
+5. An eval with 25 clusters of 8 items and $\rho = 0.5$. What is the effective sample size?
 
 <details><summary>Answer</summary>
 
-DEFF = 1 + 7 x 0.5 = 4.5. N = 200, so effective n = 200 / 4.5 = 44, not 200.
+$\text{DEFF} = 1 + 7 \times 0.5 = 4.5$. $N = 200$, so effective $n = 200 / 4.5 = 44$, not 200.
 
 </details>
 
@@ -786,38 +813,40 @@ A useful discipline: before using a benchmark number, ask who ran it, under what
 
 Arena-style leaderboards collect pairwise human votes ("which answer is better?") and convert them into a ranking. Two methods matter.
 
-**Elo.** Each player has a rating R. The expected score of A against B is
+**Elo.** Each player has a rating $R$. The expected score of A against B is
 
-```
-E_A = 1 / (1 + 10^((R_B - R_A) / 400))
-```
-
-so a 400-point gap means 10:1 odds (E = 0.909). After a game with outcome S in {0, 0.5, 1}, update with a step size K:
-
-```
-R_A <- R_A + K * (S - E_A)
-R_B <- R_B - K * (S - E_A)
+```math
+E_A = \frac{1}{1 + 10^{(R_B - R_A)/400}}
 ```
 
-Worked example. A is rated 1000 and B 1200. E_A = 1 / (1 + 10^(0.5)) = 0.240. If A wins with K = 32, A gains 32 x (1 - 0.240) = 24.3 points and B loses the same. Equal players moving after one win: +16 and -16.
+so a 400-point gap means 10:1 odds ($E = 0.909$). After a game with outcome $S \in \lbrace 0, 0.5, 1 \rbrace$, update with a step size $K$:
 
-Elo is **online**, so the result depends on the order of games and on K. A model that happens to be tested late, after its opponents settled, ends up with a different rating than if it came first. That is a fine property for chess and an unfortunate one for a static leaderboard.
-
-**Bradley-Terry.** Assume each system i has a positive strength p_i, with
-
-```
-P(i beats j) = p_i / (p_i + p_j)
-```
-
-Given all battles, find the p that maximise the likelihood. A simple, convergent method is the minorise-maximise (MM) update:
-
-```
-p_i <- W_i / sum_j ( n_ij / (p_i + p_j) )
+```math
+\begin{aligned}
+R_A &\leftarrow R_A + K(S - E_A) \\
+R_B &\leftarrow R_B - K(S - E_A)
+\end{aligned}
 ```
 
-where W_i is the number of wins (ties count 0.5 each) and n_ij the number of battles between i and j. Rescale after each iteration (for example to geometric mean 1), because only ratios are identified. Order does not matter, and the fit supports confidence intervals by bootstrapping over battles.
+Worked example. A is rated 1000 and B 1200. $E_A = 1 / (1 + 10^{0.5}) = 0.240$. If A wins with $K = 32$, A gains $32 \times (1 - 0.240) = 24.3$ points and B loses the same. Equal players moving after one win: +16 and -16.
 
-Worked example. A beats B in 3 of 4 battles. The MLE for P(A beats B) is 3/4, so p_A / p_B = 3. In Elo points, 400 x log10(3) = 190.8. With 100 battles and 75 wins the point estimate is identical but the bootstrap interval is far narrower, which is why leaderboards publish intervals and why an Elo gap of 10 points between adjacent models is usually noise. [Exercise 05](exercises/ex05_elo_bradley_terry.py) implements both and shows the order dependence.
+Elo is **online**, so the result depends on the order of games and on $K$. A model that happens to be tested late, after its opponents settled, ends up with a different rating than if it came first. That is a fine property for chess and an unfortunate one for a static leaderboard.
+
+**Bradley-Terry.** Assume each system $i$ has a positive strength $p_i$, with
+
+```math
+P(i \text{ beats } j) = \frac{p_i}{p_i + p_j}
+```
+
+Given all battles, find the $p_i$ that maximise the likelihood. A simple, convergent method is the minorise-maximise (MM) update:
+
+```math
+p_i \leftarrow \frac{W_i}{\sum_j n_{ij} / (p_i + p_j)}
+```
+
+where $W_i$ is the number of wins (ties count 0.5 each) and $n_{ij}$ the number of battles between $i$ and $j$. Rescale after each iteration (for example to geometric mean 1), because only ratios are identified. Order does not matter, and the fit supports confidence intervals by bootstrapping over battles.
+
+Worked example. A beats B in 3 of 4 battles. The MLE for $P(A \text{ beats } B)$ is 3/4, so $p_A / p_B = 3$. In Elo points, $400 \log_{10} 3 = 190.8$. With 100 battles and 75 wins the point estimate is identical but the bootstrap interval is far narrower, which is why leaderboards publish intervals and why an Elo gap of 10 points between adjacent models is usually noise. [Exercise 05](exercises/ex05_elo_bradley_terry.py) implements both and shows the order dependence.
 
 ### What arena rankings measure
 
@@ -833,7 +862,7 @@ For a product decision use your own set (Part 2) and run candidate models under 
 
 <details><summary>Answer</summary>
 
-Bradley-Terry fits all battles jointly by maximum likelihood, so it is independent of game order and has no step-size parameter, and it supports bootstrap confidence intervals. Elo depends on K and on the order in which games arrive.
+Bradley-Terry fits all battles jointly by maximum likelihood, so it is independent of game order and has no step-size parameter, and it supports bootstrap confidence intervals. Elo depends on $K$ and on the order in which games arrive.
 
 </details>
 
@@ -841,7 +870,7 @@ Bradley-Terry fits all battles jointly by maximum likelihood, so it is independe
 
 <details><summary>Answer</summary>
 
-Odds 60:40 = 1.5. Gap = 400 x log10(1.5) = 70.4 points.
+Odds 60:40 = 1.5. Gap $= 400 \log_{10} 1.5 = 70.4$ points.
 
 </details>
 
@@ -893,9 +922,9 @@ Each stage answers a different question and is cheaper than the next:
 - **Unit of randomisation.** Randomise by user (or account), not by request, so a user's experience is consistent and one user's repeated sessions do not count as independent evidence. If outputs feed a shared knowledge base or interact across users, consider cluster randomisation.
 - **Metric hierarchy.** Choose one **primary metric** tied to value (task completion, resolution without escalation, 7-day retention), a few **diagnostic metrics** that explain movement (turns per task, acceptance rate, regenerations) and **guardrail metrics** that must not regress.
 - **Pre-register the decision rule** and the sample size.
-- **Sample size** uses the Part 5 formulas, with the user-level variance of the metric and the minimum effect worth shipping. A binary task-completion metric at 60% needs thousands of users per arm to detect 2 points: n = (1.96 x sqrt(2 x 0.6 x 0.4) + 0.842 x sqrt(2 x 0.24))^2 / 0.02^2, which is about 9,300 per arm. Variance reduction (regressing out pre-experiment behaviour) can shrink it considerably.
+- **Sample size** uses the Part 5 formulas, with the user-level variance of the metric and the minimum effect worth shipping. A binary task-completion metric at 60% needs thousands of users per arm to detect 2 points: $n = (1.96 \sqrt{2 \times 0.6 \times 0.4} + 0.842 \sqrt{2 \times 0.24})^2 / 0.02^2$, which is about 9,400 per arm. Variance reduction (regressing out pre-experiment behaviour) can shrink it considerably.
 - **Duration.** Run at least a full weekly cycle, because behaviour differs on weekdays and weekends, and long enough that novelty effects fade.
-- **Sample ratio mismatch (SRM).** Before reading any metric, check that the observed allocation matches the design. For a 50/50 design with 20,000 users, 10,400 versus 9,600 gives chi2 = 400^2 / 10,000 + 400^2 / 10,000 = 32, p about 1.5e-8 (one degree of freedom). A mismatch means assignment or logging is broken (for example the treatment crashes and those users drop out of the logs), and the metrics cannot be trusted. Even 5,200 versus 4,800 out of 10,000 gives chi2 = 16 and p about 6e-5.
+- **Sample ratio mismatch (SRM).** Before reading any metric, check that the observed allocation matches the design. For a 50/50 design with 20,000 users, 10,400 versus 9,600 gives $\chi^2 = 400^2 / 10{,}000 + 400^2 / 10{,}000 = 32$, $p \approx 1.5 \times 10^{-8}$ (one degree of freedom). A mismatch means assignment or logging is broken (for example the treatment crashes and those users drop out of the logs), and the metrics cannot be trusted. Even 5,200 versus 4,800 out of 10,000 gives $\chi^2 = 16$ and $p \approx 6 \times 10^{-5}$.
 - **Peeking.** Repeatedly checking p-values and stopping on the first significant one inflates false positives (about 14% for five looks at a nominal 5%). Use a fixed horizon, or a sequential method designed for repeated looks.
 
 ### Guardrail versus quality metrics
@@ -954,7 +983,7 @@ Requests from one user are correlated and users should see a consistent experien
 
 <details><summary>Answer</summary>
 
-Expected 25,000 each. chi2 = 300^2 / 25,000 x 2 = 7.2, p about 0.007. Yes, a mismatch that warrants investigation before reading any result.
+Expected 25,000 each. $\chi^2 = 2 \times 300^2 / 25{,}000 = 7.2$, $p \approx 0.007$. Yes, a mismatch that warrants investigation before reading any result.
 
 </details>
 
@@ -1009,14 +1038,28 @@ Two derived quantities turn a trace into an action list.
 Latency distributions are skewed with long tails (queueing, cold caches, long generations, retries). The mean hides the tail, and users and downstream timeouts feel the tail.
 
 - **p50** is the typical request, **p95** the experience of the unlucky 1 in 20, **p99** the worst 1 in 100.
-- Compute a percentile by sorting and interpolating: for q in [0, 100], position = (n - 1) x q / 100, then interpolate between neighbours. With n = 1,000, p99 sits between the 10th and 11th slowest requests, so it is itself noisy; with 100 requests it is mostly the single worst one.
+- Compute a percentile by sorting and interpolating: for $q \in [0, 100]$, $\text{position} = (n - 1) \times q / 100$, then interpolate between neighbours. With $n = 1{,}000$, p99 sits between the 10th and 11th slowest requests, so it is itself noisy; with 100 requests it is mostly the single worst one.
 - **Do not average percentiles.** If host 1 has p95 = 2 s over 10,000 requests and host 2 has p95 = 8 s over 100 requests, the fleet p95 is nowhere near 5 s. Aggregate the raw samples or histograms (and merge sketches such as t-digest or HDR histograms), then compute the percentile.
-- **Tails compound.** If a single call exceeds 14 s 1% of the time, an agent that makes 5 sequential calls hits at least one slow call with probability 1 - 0.99^5 = 4.9%. Fan-out and chained steps make the end-to-end tail much heavier than any component's. Track the task-level latency distribution, not only per-call percentiles.
-- **Split LLM latency.** Time to first token (TTFT, driven by queueing and prompt processing) matters for streaming UX; time per output token multiplies by length. A response of 400 tokens at 25 ms per token with a TTFT of 0.6 s takes 0.6 + 400 x 0.025 = 10.6 s. Reasoning models add hidden "thinking" tokens that count towards both latency and cost while producing no visible text, so record them in their own attribute.
+- **Tails compound.** If a single call exceeds 14 s 1% of the time, an agent that makes 5 sequential calls hits at least one slow call with probability $1 - 0.99^5 = 0.049$, or 4.9%. Fan-out and chained steps make the end-to-end tail much heavier than any component's. Track the task-level latency distribution, not only per-call percentiles.
+- **Split LLM latency.** Time to first token (TTFT, driven by queueing and prompt processing) matters for streaming UX; time per output token multiplies by length. A response of 400 tokens at 25 ms per token with a TTFT of 0.6 s takes $0.6 + 400 \times 0.025 = 10.6$ s. Reasoning models add hidden "thinking" tokens that count towards both latency and cost while producing no visible text, so record them in their own attribute.
 
 ### Token and cost accounting
 
-Cost per call = input tokens x input price + output tokens x output price (plus cached-token and reasoning-token rates where the provider has them). Prices are quoted per million tokens. Example with illustrative prices of 3 and 15 per million input and output tokens: a call with 2,000 input and 500 output tokens costs 2,000 x 3 / 1e6 + 500 x 15 / 1e6 = 0.006 + 0.0075 = 0.0135 currency units. At 1 million such calls per day that is 13,500 per day, about 405,000 per 30 days.
+Cost per call, plus cached-token and reasoning-token rates where the provider has them, is
+
+```math
+\text{cost per call} = \text{input tokens} \times \text{input price} + \text{output tokens} \times \text{output price}
+```
+
+Prices are quoted per million tokens. Example with illustrative prices of 3 and 15 per million input and output tokens, a call with 2,000 input and 500 output tokens, and 1 million such calls per day:
+
+```math
+\begin{aligned}
+\text{per call} &= \frac{2{,}000 \times 3}{10^6} + \frac{500 \times 15}{10^6} = 0.006 + 0.0075 = 0.0135 \text{ currency units} \\
+\text{per day} &= 0.0135 \times 1{,}000{,}000 = 13{,}500 \\
+\text{per 30 days} &= 13{,}500 \times 30 = 405{,}000
+\end{aligned}
+```
 
 Roll costs up the span tree so you can attribute spend to features, prompts and tenants. Typical findings: a retry loop that doubles spend on one route; prompt creep (the system prompt and retrieved context grow week by week); one tool that returns huge payloads which get pasted back into the context each turn. Track **cost per successful task**, not just cost per request, so a cheaper model that fails twice as often does not look efficient.
 
@@ -1044,22 +1087,24 @@ Pin exact model versions and treat any version change as a release, with the gol
 
 **Population Stability Index (PSI)** compares the distribution of a variable (judge score, prompt length, latency) in a recent window against a reference window. Split into bins, usually based on the reference quantiles (deciles), and compute
 
-```
-PSI = sum over bins of (a_i - e_i) * ln(a_i / e_i)
-```
-
-where e_i and a_i are the reference and current proportions. Worked example with three bins: e = [0.5, 0.3, 0.2] and a = [0.3, 0.3, 0.4].
-
-```
-bin 1: (0.3 - 0.5) * ln(0.3/0.5) = (-0.2)(-0.5108) = 0.1022
-bin 2: 0
-bin 3: (0.4 - 0.2) * ln(0.4/0.2) = (0.2)(0.6931)   = 0.1386
-PSI = 0.2408
+```math
+\text{PSI} = \sum_{i \in \text{bins}} (a_i - e_i) \ln\frac{a_i}{e_i}
 ```
 
-A common rule of thumb (a convention from credit scoring, not a theorem): below 0.1 stable, 0.1 to 0.25 moderate shift, above 0.25 major shift. The statistic is symmetric in the two distributions, and it explodes on empty bins, so clip proportions at a small epsilon. For samples of 5,000 from a standard normal compared against another normal sample with mean shifted by 0.5 standard deviations, PSI is about 0.25, while two independent samples from the same distribution give about 0.005.
+where $e_i$ and $a_i$ are the reference and current proportions. Worked example with three bins: $e = [0.5, 0.3, 0.2]$ and $a = [0.3, 0.3, 0.4]$.
 
-**Two-sample Kolmogorov-Smirnov (KS)** compares empirical distribution functions directly. The statistic D is the largest vertical gap between the two empirical CDFs. Example: x = [1, 2, 3], y = [2.5, 3.5, 4.5]. At 2, F_x = 2/3 and F_y = 0, so the gap is 2/3. At 3, F_x = 1 and F_y = 1/3, gap 2/3. D = 2/3. The asymptotic p-value uses the Kolmogorov distribution with an effective size ne = nm / (n + m). KS needs no binning and has a p-value, but with large samples it flags shifts too small to matter: D = 0.02 is unremarkable with 200 points per window and highly significant with 100,000 per window. Use PSI or an effect-size threshold for alerting, and KS for confirming. [Exercise 07](exercises/ex07_drift_psi_ks.py) implements both.
+```math
+\begin{aligned}
+\text{bin 1} &= (0.3 - 0.5)\ln(0.3/0.5) = (-0.2)(-0.5108) = 0.1022 \\
+\text{bin 2} &= 0 \\
+\text{bin 3} &= (0.4 - 0.2)\ln(0.4/0.2) = (0.2)(0.6931) = 0.1386 \\
+\text{PSI} &= 0.2408
+\end{aligned}
+```
+
+A common rule of thumb (a convention from credit scoring, not a theorem): below 0.1 stable, 0.1 to 0.25 moderate shift, above 0.25 major shift. The statistic is symmetric in the two distributions, and it explodes on empty bins, so clip proportions at a small $\epsilon$. For samples of 5,000 from a standard normal compared against another normal sample with mean shifted by 0.5 standard deviations, PSI is about 0.25, while two independent samples from the same distribution give about 0.005.
+
+**Two-sample Kolmogorov-Smirnov (KS)** compares empirical distribution functions directly. The statistic $D$ is the largest vertical gap between the two empirical CDFs. Example: $x = [1, 2, 3]$, $y = [2.5, 3.5, 4.5]$. At 2, $F_x = 2/3$ and $F_y = 0$, so the gap is 2/3. At 3, $F_x = 1$ and $F_y = 1/3$, gap 2/3. $D = 2/3$. The asymptotic p-value uses the Kolmogorov distribution with an effective size $n_e = nm / (n + m)$. KS needs no binning and has a p-value, but with large samples it flags shifts too small to matter: $D = 0.02$ is unremarkable with 200 points per window and highly significant with 100,000 per window. Use PSI or an effect-size threshold for alerting, and KS for confirming. [Exercise 07](exercises/ex07_drift_psi_ks.py) implements both.
 
 What to monitor with these: judge-score histograms per criterion, prompt and completion token counts, latency, retrieval scores, topic or intent distribution (cluster embeddings), tool-call frequencies, refusal rate. These need no labels, so they give early warning; but a distribution change is a symptom. It does not tell you whether quality changed, so follow an alert with a sample review and a rerun of the golden set.
 
@@ -1082,7 +1127,7 @@ What to monitor with these: judge-score histograms per criterion, prompt and com
 
 <details><summary>Answer</summary>
 
-The union of children is [0, 7] and [8, 10], length 7 + 2 = 9. Self time = 10 - 9 = 1 s (the gap 7 to 8). The sum of child durations is 4 + 4 + 2 = 10, which would wrongly give 0.
+The union of children is [0, 7] and [8, 10], length $7 + 2 = 9$. Self time $= 10 - 9 = 1$ s (the gap 7 to 8). The sum of child durations is $4 + 4 + 2 = 10$, which would wrongly give 0.
 
 </details>
 
@@ -1098,7 +1143,9 @@ A percentile is not linear: it depends on the whole distribution and on the weig
 
 <details><summary>Answer</summary>
 
-0.15 x ln(1.6) = 0.0705; 0.05 x ln(1.2) = 0.0091; -0.05 x ln(0.8) = 0.0112; -0.15 x ln(0.4) = 0.1374. PSI = 0.228, moderate.
+$$\text{PSI} = 0.15 \ln 1.6 + 0.05 \ln 1.2 - 0.05 \ln 0.8 - 0.15 \ln 0.4 = 0.0705 + 0.0091 + 0.0112 + 0.1374 = 0.228$$
+
+Moderate.
 
 </details>
 
@@ -1148,9 +1195,9 @@ Compare with a baseline stored from the main branch run on the same dataset vers
 
 ### Setting the threshold: the non-inferiority sample size
 
-Suppose the gate is "block if the new version is worse by more than 2 points". Using the paired difference with disagreement rate pd = 0.10 on n items, the SE of the mean difference is about sqrt(pd / n). A one-sided 95% lower bound is diff - 1.645 x SE. With n = 300: SE = sqrt(0.10 / 300) = 0.0183, and the lower bound is diff - 0.030. Even if the true difference is exactly zero, the bound sits near -3 points, so you cannot certify a 2-point margin: the gate would fail, or it would pass only by luck. To have the lower bound at -2 points for a zero true difference you need 1.645 x sqrt(pd / n) <= 0.02, so n >= 1.645^2 x 0.10 / 0.0004 = 676 items.
+Suppose the gate is "block if the new version is worse by more than 2 points". Using the paired difference with disagreement rate $p_d = 0.10$ on $n$ items, the SE of the mean difference is about $\sqrt{p_d / n}$. A one-sided 95% lower bound is $\text{diff} - 1.645 \times \text{SE}$. With $n = 300$: $\text{SE} = \sqrt{0.10 / 300} = 0.0183$, and the lower bound is $\text{diff} - 0.030$. Even if the true difference is exactly zero, the bound sits near -3 points, so you cannot certify a 2-point margin: the gate would fail, or it would pass only by luck. To have the lower bound at -2 points for a zero true difference you need $1.645 \sqrt{p_d / n} \le 0.02$, so $n \ge 1.645^2 \times 0.10 / 0.0004 = 676.5$, or 677 items.
 
-This is the trade-off in every CI design. Short suites cannot guarantee small margins. Options: lower the bar to catching large regressions in PRs (a margin of 5 points needs only about 110 items under the same assumptions) and rely on the nightly full run for small ones; raise n; reduce pd by controlling the generation (lower temperature, fixed seeds where supported, several samples per item); or use more discriminating items (the hard cases where regressions show first).
+This is the trade-off in every CI design. Short suites cannot guarantee small margins. Options: lower the bar to catching large regressions in PRs (a margin of 5 points needs only about 110 items under the same assumptions) and rely on the nightly full run for small ones; raise n; reduce $p_d$ by controlling the generation (lower temperature, fixed seeds where supported, several samples per item); or use more discriminating items (the hard cases where regressions show first).
 
 ### Flakiness
 
@@ -1212,11 +1259,11 @@ The spread is about 5 points (SD about 2.2), so a 2-point tolerance will fire on
 
 </details>
 
-3. A margin of 3 points, pd = 0.08. How many items are needed so that a truly equal system passes a 95% one-sided gate?
+3. A margin of 3 points, $p_d = 0.08$. How many items are needed so that a truly equal system passes a 95% one-sided gate?
 
 <details><summary>Answer</summary>
 
-n >= 1.645^2 x 0.08 / 0.03^2 = 2.706 x 0.08 / 0.0009 = 240.5, so 241 items. This uses the normal approximation to the paired difference with variance about pd.
+$n \ge 1.645^2 \times 0.08 / 0.03^2 = 2.706 \times 0.08 / 0.0009 = 240.5$, so 241 items. This uses the normal approximation to the paired difference with variance about $p_d$.
 
 </details>
 
@@ -1288,7 +1335,7 @@ Primary sources and canonical references:
 - [Chatbot Arena: An Open Platform for Evaluating LLMs by Human Preference](https://arxiv.org/abs/2403.04132) - Chiang et al. Pairwise votes and Bradley-Terry ranking (Part 6).
 - [Adding Error Bars to Evals: A Statistical Approach to Language Model Evaluations](https://arxiv.org/abs/2411.00640) - Evan Miller. Clustered standard errors, paired analysis and power for eval comparisons (Part 5).
 - [SWE-bench: Can Language Models Resolve Real-World GitHub Issues?](https://arxiv.org/abs/2310.06770) - Jimenez et al. An execution-graded agentic benchmark (Part 6).
-- [tau-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains](https://arxiv.org/abs/2406.12045) - Yao et al. Introduces the pass^k reliability measure (Part 3).
+- [tau-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains](https://arxiv.org/abs/2406.12045) - Yao et al. Introduces the $\text{pass}^k$ reliability measure (Part 3).
 - [Holistic Evaluation of Language Models](https://arxiv.org/abs/2211.09110) - Liang et al. (HELM). Multi-metric evaluation and the argument for reporting more than accuracy.
 - [BLEU: a Method for Automatic Evaluation of Machine Translation](https://aclanthology.org/P02-1040/) - Papineni et al. The original definition including clipping and the brevity penalty (Part 3).
 - [ROUGE: A Package for Automatic Evaluation of Summaries](https://aclanthology.org/W04-1013/) - Lin. ROUGE-N and ROUGE-L (Part 3).

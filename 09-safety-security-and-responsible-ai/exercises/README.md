@@ -35,7 +35,7 @@ A prompt-injection classifier has TPR 90% and FPR 0.5%. In a deployment, 1 reque
 
 <details><summary>Answer</summary>
 
-Attacks = 400,000 / 2,000 = 200, benign = 399,800. (a) Blocked = 0.9 x 200 = 180, missed = 20. (b) Benign blocked = 0.005 x 399,800 = 1,999. (c) Precision = 180 / (180 + 1,999) = 8.3%. (d) For precision 0.5, FP = TP = 180, so FPR = 180 / 399,800 = 0.045%. That is 11 times lower than the current FPR, which is why a second stage or a stricter threshold is needed before anyone acts on a block automatically.
+Attacks $= 400{,}000 / 2{,}000 = 200$, benign $= 399{,}800$. (a) Blocked $= 0.9 \times 200 = 180$, missed $= 20$. (b) Benign blocked $= 0.005 \times 399{,}800 = 1{,}999$. (c) Precision $= 180 / (180 + 1{,}999) = 0.083$, or 8.3%. (d) For precision 0.5, $\text{FP} = \text{TP} = 180$, so $\text{FPR} = 180 / 399{,}800 = 0.00045$, or 0.045%. That is 11 times lower than the current FPR, which is why a second stage or a stricter threshold is needed before anyone acts on a block automatically.
 
 </details>
 
@@ -45,17 +45,37 @@ A jailbreak succeeds against your assistant 0.2% of the time per independent att
 
 <details><summary>Answer</summary>
 
-(a) 1 - 0.998^500 = 1 - e^(500 x ln 0.998) = 1 - e^(-1.001) = 63.3%. (b) Solve 1 - 0.998^n = 0.9, so n = ln(0.1) / ln(0.998) = 1,150 attempts. (c) A per-attempt rate is not a risk statement for a public system with cheap retries. What matters is the consequence of one success. Bound the blast radius, add rate limits per account, and monitor repeated near-miss patterns.
+(a) The chance of at least one success is
+
+$$1 - 0.998^{500} = 1 - e^{500 \ln 0.998} = 1 - e^{-1.001} = 0.633$$
+
+that is 63.3%. (b) Solve $1 - 0.998^n = 0.9$:
+
+$$n = \frac{\ln 0.1}{\ln 0.998} = 1{,}150.1$$
+
+so 1,151 attempts. (c) A per-attempt rate is not a risk statement for a public system with cheap retries. What matters is the consequence of one success. Bound the blast radius, add rate limits per account, and monitor repeated near-miss patterns.
 
 </details>
 
 ### P3. Sample size for a red-team claim
 
-You want to claim, at 95% confidence, that the injection ASR for a tool-using agent on one attack family is below 2%. (a) How many independent attempts with zero successes do you need? (b) You run 100 attempts and see 1 success. What can you claim? (Use the Wilson interval, z = 1.96.)
+You want to claim, at 95% confidence, that the injection ASR for a tool-using agent on one attack family is below 2%. (a) How many independent attempts with zero successes do you need? (b) You run 100 attempts and see 1 success. What can you claim? (Use the Wilson interval, $z = 1.96$.)
 
 <details><summary>Answer</summary>
 
-(a) n = ln(0.05) / ln(0.98) = 148.3, so 149 attempts. (b) p = 0.01, z^2 = 3.8416. denominator = 1 + 3.8416/100 = 1.0384. centre = (0.01 + 0.0192) / 1.0384 = 0.0281. half = 1.96 x sqrt(0.01 x 0.99 / 100 + 3.8416 / 40,000) / 1.0384 = 1.96 x sqrt(0.000099 + 0.000096) / 1.0384 = 1.96 x 0.01396 / 1.0384 = 0.0264. Interval = ~0.2% to ~5.4%. You cannot claim below 2%. You would need more attempts, or to accept a higher bound.
+(a) The number of attempts is
+
+$$n = \frac{\ln 0.05}{\ln 0.98} = 148.3$$
+
+so 149 attempts. (b) With $p = 0.01$ and $z^2 = 3.8416$:
+
+$$\text{denominator} = 1 + \frac{3.8416}{100} = 1.0384$$
+
+$$\text{centre} = \frac{0.01 + 0.0192}{1.0384} = 0.0281$$
+
+$$\text{half} = \frac{1.96 \sqrt{0.01 \times 0.99 / 100 + 3.8416 / 40{,}000}}{1.0384} = \frac{1.96 \sqrt{0.000099 + 0.000096}}{1.0384} = \frac{1.96 \times 0.01396}{1.0384} = 0.0264$$
+
+Interval = ~0.2% to ~5.4%. You cannot claim below 2%. You would need more attempts, or to accept a higher bound.
 
 </details>
 
@@ -85,7 +105,17 @@ A legal-research assistant answers a question correctly with value +1 and wrongl
 
 <details><summary>Answer</summary>
 
-(a) p > 6 / 7 = 0.857. (b) Answering only the 0.95 group: expected value per answered question = 0.95 - 6 x 0.05 = 0.65. Per question overall = 0.6 x 0.65 = 0.39. Answer everything: group values are 0.95 - 0.3 = 0.65, 0.80 - 1.2 = -0.40, 0.50 - 3.0 = -2.50. Overall = 0.6 x 0.65 + 0.25 x (-0.40) + 0.15 x (-2.50) = 0.39 - 0.10 - 0.375 = -0.085. Abstaining on 40% of questions turns a loss into a gain.
+(a) $p \gt 6/7 = 0.857$. (b) Answering only the 0.95 group, the expected value per answered question and per question overall are
+
+$$0.95 - 6 \times 0.05 = 0.65, \qquad 0.6 \times 0.65 = 0.39$$
+
+Answer everything: group values are
+
+$$0.95 - 0.3 = 0.65, \qquad 0.80 - 1.2 = -0.40, \qquad 0.50 - 3.0 = -2.50$$
+
+$$\text{overall} = 0.6 \times 0.65 + 0.25 \times (-0.40) + 0.15 \times (-2.50) = 0.39 - 0.10 - 0.375 = -0.085$$
+
+Abstaining on 40% of questions turns a loss into a gain.
 
 </details>
 
@@ -105,6 +135,10 @@ You must test a vendor's CV-screening LLM for gender bias with black-box access 
 
 <details><summary>Answer</summary>
 
-Take ~200 real or realistic CVs with identifying details removed. For each, create a variant that differs only in a gendered name and pronouns, using several names per group. Run each variant several times (for example 5) to average over sampling noise. Per pair, record whether the original or the swapped version scores higher or passes the cut. Count discordant pairs b (original wins) and c (swapped wins) and compute z = (b - c) / sqrt(b + c). Report the flip rate and the shift in mean score with intervals. Add intersections (name signals for ethnicity) and check that the swap changes nothing else in the text. If z is large, document and escalate to the vendor, and keep a human reviewing decisions.
+Take ~200 real or realistic CVs with identifying details removed. For each, create a variant that differs only in a gendered name and pronouns, using several names per group. Run each variant several times (for example 5) to average over sampling noise. Per pair, record whether the original or the swapped version scores higher or passes the cut. Count discordant pairs $b$ (original wins) and $c$ (swapped wins) and compute
+
+$$z = \frac{b - c}{\sqrt{b + c}}$$
+
+Report the flip rate and the shift in mean score with intervals. Add intersections (name signals for ethnicity) and check that the swap changes nothing else in the text. If $z$ is large, document and escalate to the vendor, and keep a human reviewing decisions.
 
 </details>

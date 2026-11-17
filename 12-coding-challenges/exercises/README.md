@@ -49,17 +49,23 @@ Align shapes from the right and pad the shorter one with 1s on the left. A dimen
 
 <details><summary>Answer</summary>
 
-(a) exp overflows where the result exceeds the largest finite value: ln(3.4e38) is about 88.7 for float32, and ln(1.8e308) is about 709.8 for float64. (b) `exp(1000)` is `inf`, so the naive version computes `inf / inf = nan` for both entries. (c) Subtract the max (1001) to get `[-1, 0]`. Then exp gives `[0.3679, 1]`, the sum is 1.3679, and the probabilities are `[0.2689, 0.7311]`. The shift changes nothing mathematically because the factor `exp(-m)` cancels between numerator and denominator.
+(a) exp overflows where the result exceeds the largest finite value: $\ln(3.4 \times 10^{38})$ is about 88.7 for float32, and $\ln(1.8 \times 10^{308})$ is about 709.8 for float64. (b) `exp(1000)` is `inf`, so the naive version computes `inf / inf = nan` for both entries. (c) Subtract the max (1001) to get `[-1, 0]`. Then exp gives `[0.3679, 1]`, the sum is 1.3679, and the probabilities are `[0.2689, 0.7311]`. The shift changes nothing mathematically because the factor $\exp(-m)$ cancels between numerator and denominator.
 
 </details>
 
 ### P3. Choosing gamma for speculative decoding
 
-The draft accepts each token independently with probability a = 0.8. Drafting one token costs c = 0.1 of a target forward pass. With gamma drafted tokens, one step costs 1 + gamma * c target passes and yields (1 - a^(gamma+1)) / (1 - a) tokens on average. Compute the speedup over plain decoding for gamma = 3, 6 and 9. Which gamma is best of those, and why does it not keep improving?
+The draft accepts each token independently with probability $a = 0.8$. Drafting one token costs $c = 0.1$ of a target forward pass. With $\gamma$ drafted tokens, one step costs $1 + \gamma c$ target passes and yields $(1 - a^{\gamma+1}) / (1 - a)$ tokens on average. Compute the speedup over plain decoding for $\gamma = 3$, 6 and 9. Which $\gamma$ is best of those, and why does it not keep improving?
 
 <details><summary>Answer</summary>
 
-gamma = 3: tokens = (1 - 0.8^4) / 0.2 = 2.952, cost = 1.3, speedup 2.27. gamma = 6: tokens = (1 - 0.8^7) / 0.2 = 3.951, cost = 1.6, speedup 2.47. gamma = 9: tokens = (1 - 0.8^10) / 0.2 = 4.463, cost = 1.9, speedup 2.35. The optimum is near gamma = 6 (2.47). Expected tokens saturate at 1 / (1 - a) = 5 while the draft cost grows linearly, so past some gamma every extra drafted token costs more than it adds. The real optimum shifts with a and c, which is why serving systems tune or adapt gamma. This model assumes independent acceptance, which real text violates.
+$$\gamma = 3: \quad \text{tokens} = (1 - 0.8^4) / 0.2 = 2.952, \quad \text{cost} = 1.3, \quad \text{speedup} = 2.27$$
+
+$$\gamma = 6: \quad \text{tokens} = (1 - 0.8^7) / 0.2 = 3.951, \quad \text{cost} = 1.6, \quad \text{speedup} = 2.47$$
+
+$$\gamma = 9: \quad \text{tokens} = (1 - 0.8^{10}) / 0.2 = 4.463, \quad \text{cost} = 1.9, \quad \text{speedup} = 2.35$$
+
+The optimum is near $\gamma = 6$ (2.47). Expected tokens saturate at $1 / (1 - a) = 5$ while the draft cost grows linearly, so past some $\gamma$ every extra drafted token costs more than it adds. The real optimum shifts with $a$ and $c$, which is why serving systems tune or adapt $\gamma$. This model assumes independent acceptance, which real text violates.
 
 </details>
 
@@ -69,7 +75,7 @@ A decoder has 32 layers, each with a causal sliding window of 4,096 tokens (the 
 
 <details><summary>Answer</summary>
 
-Each layer extends reach by 4,095 positions, so the theoretical limit is 32 x 4,095 = 131,040 tokens. In practice, information passed through many layers is mixed, attenuated and competes with local signal, so effective recall of a specific fact far outside the window is much weaker than the arithmetic suggests. If a task needs exact retrieval of an early fact, put some layers or heads on full attention, or add retrieval. Full-attention layers (as in hybrid designs) solve it directly.
+Each layer extends reach by 4,095 positions, so the theoretical limit is $32 \times 4{,}095 = 131{,}040$ tokens. In practice, information passed through many layers is mixed, attenuated and competes with local signal, so effective recall of a specific fact far outside the window is much weaker than the arithmetic suggests. If a task needs exact retrieval of an early fact, put some layers or heads on full attention, or add retrieval. Full-attention layers (as in hybrid designs) solve it directly.
 
 </details>
 
@@ -79,17 +85,21 @@ A model has 32 layers, 8 KV heads (grouped-query attention), head dimension 128,
 
 <details><summary>Answer</summary>
 
-Per token: 2 (K and V) x 32 layers x 8 heads x 128 x 2 bytes = 131,072 bytes (128 KiB). One 32,768-token sequence: 131,072 x 32,768 = 4 GiB. Batch of 8: 32 GiB, before weights. An 8-bit cache halves each figure (2 GiB, 16 GiB) at some accuracy risk. With full multi-head attention (32 KV heads) the numbers would be 4 times larger, which is why GQA matters at long context.
+Per token (the factor 2 is K and V):
+
+$$2 \times 32 \text{ layers} \times 8 \text{ heads} \times 128 \times 2 \text{ bytes} = 131{,}072 \text{ bytes} = 128 \text{ KiB}$$
+
+One 32,768-token sequence: $131{,}072 \times 32{,}768 \text{ bytes} = 4 \text{ GiB}$. Batch of 8: 32 GiB, before weights. An 8-bit cache halves each figure (2 GiB, 16 GiB) at some accuracy risk. With full multi-head attention (32 KV heads) the numbers would be 4 times larger, which is why GQA matters at long context.
 
 </details>
 
 ### P6. Token bucket by hand
 
-A token bucket has capacity 10 and refills at 2 tokens per second. It starts full. Fifteen one-token requests arrive at t = 0. (a) How many pass? (b) A client retries the rejected ones at t = 2.0 s, all at once. How many pass? (c) What is the maximum sustained rate, and what is the largest burst?
+A token bucket has capacity 10 and refills at 2 tokens per second. It starts full. Fifteen one-token requests arrive at $t = 0$. (a) How many pass? (b) A client retries the rejected ones at $t = 2.0$ s, all at once. How many pass? (c) What is the maximum sustained rate, and what is the largest burst?
 
 <details><summary>Answer</summary>
 
-(a) 10 pass and 5 are rejected. (b) After 2 s the bucket holds min(10, 0 + 2 x 2) = 4 tokens, so 4 pass and 1 is rejected again. (c) Sustained rate is 2 requests per second. The largest burst is the capacity, 10, and it is only available after the bucket has been idle for at least 5 s. Note the synchronised retry: if many clients retry on the same schedule they re-collide, which is why backoff needs jitter.
+(a) 10 pass and 5 are rejected. (b) After 2 s the bucket holds $\min(10, 0 + 2 \times 2) = 4$ tokens, so 4 pass and 1 is rejected again. (c) Sustained rate is 2 requests per second. The largest burst is the capacity, 10, and it is only available after the bucket has been idle for at least 5 s. Note the synchronised retry: if many clients retry on the same schedule they re-collide, which is why backoff needs jitter.
 
 </details>
 
@@ -99,7 +109,7 @@ A user request passes through three services in a chain. Each calls the next wit
 
 <details><summary>Answer</summary>
 
-Each layer multiplies attempts: 3 x 3 x 3 = 27 calls reach the failing service for one user request. That is the retry storm pattern, and it makes recovery harder. Mitigations: retry at one layer only (usually the edge), use a retry budget (for example retries limited to about 10% of recent calls), use circuit breakers so a failing dependency is skipped fast, honour `Retry-After` and propagate a deadline so nobody retries after the caller has given up, and add jitter so retries do not synchronise.
+Each layer multiplies attempts: $3 \times 3 \times 3 = 27$ calls reach the failing service for one user request. That is the retry storm pattern, and it makes recovery harder. Mitigations: retry at one layer only (usually the edge), use a retry budget (for example retries limited to about 10% of recent calls), use circuit breakers so a failing dependency is skipped fast, honour `Retry-After` and propagate a deadline so nobody retries after the caller has given up, and add jitter so retries do not synchronise.
 
 </details>
 
@@ -109,7 +119,7 @@ For each symptom, name the most likely planted bug. (a) Training loss turns to N
 
 <details><summary>Answer</summary>
 
-(a) Softmax or cross-entropy without max subtraction (or a log of a probability that underflowed to 0). (b) A causal mask that is applied after softmax, applied to the wrong axis, or missing. Information leaks from the future through the softmax denominator or through the unmasked scores. (c) A head-merge or head-split bug (reshape without transpose), or scaling by sqrt(d_model) instead of sqrt(d_head). Both vanish with one head. (d) The residual connection around the MLP (or attention) is dropped, so the block output replaces the stream. (e) A cache bug: wrong position offset for the new token, a cache not copied between sequences or beams, or keys cached before positional rotation is applied inconsistently. Test by comparing full-sequence logits at every step.
+(a) Softmax or cross-entropy without max subtraction (or a log of a probability that underflowed to 0). (b) A causal mask that is applied after softmax, applied to the wrong axis, or missing. Information leaks from the future through the softmax denominator or through the unmasked scores. (c) A head-merge or head-split bug (reshape without transpose), or scaling by $\sqrt{d_\text{model}}$ instead of $\sqrt{d_\text{head}}$. Both vanish with one head. (d) The residual connection around the MLP (or attention) is dropped, so the block output replaces the stream. (e) A cache bug: wrong position offset for the new token, a cache not copied between sequences or beams, or keys cached before positional rotation is applied inconsistently. Test by comparing full-sequence logits at every step.
 
 </details>
 
@@ -125,10 +135,10 @@ You must test a parser that receives arbitrary byte chunks. List five tests that
 
 ### P10. Unbiased pass@k by hand
 
-For one problem you ran n = 20 samples and c = 5 passed. Compute the unbiased pass@3 and compare it with the naive 1 - (1 - 5/20)^3. Which is larger, and why?
+For one problem you ran $n = 20$ samples and $c = 5$ passed. Compute the unbiased pass@3 and compare it with the naive $1 - (1 - 5/20)^3$. Which is larger, and why?
 
 <details><summary>Answer</summary>
 
-Unbiased: 1 - C(15, 3) / C(20, 3) = 1 - 455 / 1140 = 0.601. Naive: 1 - 0.75^3 = 0.578. The unbiased estimator is the exact probability that at least one of 3 samples drawn without replacement from your 20 contains a pass. The naive one treats the 3 draws as independent with replacement and plugs in the noisy estimate 0.25, which underestimates in expectation for small n. The gap shrinks as n grows. Report the unbiased form.
+Unbiased: $1 - \binom{15}{3} / \binom{20}{3} = 1 - 455 / 1140 = 0.601$. Naive: $1 - 0.75^3 = 0.578$. The unbiased estimator is the exact probability that at least one of 3 samples drawn without replacement from your 20 contains a pass. The naive one treats the 3 draws as independent with replacement and plugs in the noisy estimate 0.25, which underestimates in expectation for small $n$. The gap shrinks as $n$ grows. Report the unbiased form.
 
 </details>

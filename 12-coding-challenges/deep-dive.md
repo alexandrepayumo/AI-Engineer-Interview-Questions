@@ -106,7 +106,7 @@ Then write the simplest implementation that could pass them. A double loop over 
 
 **Talk while coding.** Narrate decisions, not syntax. "I subtract the row max so the largest exponent is zero, which avoids overflow and does not change the result because the factor cancels." Name the trick, name what breaks without it, and move on. Do not narrate every keystroke.
 
-**State complexity in a fixed template.** "Time is O(T^2 d) for the score matrix and O(T d) extra memory per head, dominated by the T x T scores." Naming the dominant term and what it depends on is the scored behaviour. For cache, retrieval and tokenisation challenges, also say what the cost is per step as well as in total.
+**State complexity in a fixed template.** "Time is $O(T^2 d)$ for the score matrix and $O(T d)$ extra memory per head, dominated by the $T \times T$ scores." Naming the dominant term and what it depends on is the scored behaviour. For cache, retrieval and tokenisation challenges, also say what the cost is per step as well as in total.
 
 ### When you are stuck
 
@@ -152,7 +152,7 @@ Most of the bugs in an implementation round are not algorithmic. They are shape,
 
 Align the shapes from the **right**. Pad the shorter shape with 1s on the left. Each pair of dimensions must be equal or one of them must be 1. The result takes the larger size.
 
-```
+```text
 a: (8, 1, 5)
 b:    (3, 1)    -> padded to (1, 3, 1)
 out: (8, 3, 5)
@@ -167,9 +167,9 @@ Working rules:
 
 ### A full shape trace: multi-head attention
 
-Take `B = 2`, `T = 5`, `D = 8`, `h = 2` heads, `dh = D / h = 4`.
+Take $B = 2$, $T = 5$, $D = 8$, $h = 2$ heads, $d_h = D / h = 4$.
 
-```
+```text
 x                       (2, 5, 8)
 q = x @ wq              (2, 5, 8)        wq is (8, 8)
 q.reshape(2, 5, 2, 4)   (2, 5, 2, 4)     split the LAST axis into (heads, dh)
@@ -188,7 +188,7 @@ out @ wo                (2, 5, 8)
 
 `matmul` treats leading dimensions as batch dimensions and multiplies the last two, which is why no loop over batch or head is needed.
 
-Why reshape then transpose, and not `reshape(B, h, T, dh)` directly? `reshape` reads elements in memory order and refills the new shape. The channel axis of `x` has the heads contiguous: channels 0-3 are head 0 and channels 4-7 are head 1. Splitting that axis as `(h, dh)` is a valid reshape. Reshaping straight to `(B, h, T, dh)` would instead cut the flattened `(T, D)` block into `h` chunks of `T x dh` elements, mixing different positions into one "head". The shape is right and the values are nonsense, so no error is raised. The merge has the mirror-image trap: after transposing back to `(B, T, h, dh)`, `reshape` is correct. Skip the transpose and you scramble heads across positions. `ex01_vectorise_drills.py` has a test for exactly this.
+Why reshape then transpose, and not `reshape(B, h, T, dh)` directly? `reshape` reads elements in memory order and refills the new shape. The channel axis of `x` has the heads contiguous: channels 0-3 are head 0 and channels 4-7 are head 1. Splitting that axis as `(h, dh)` is a valid reshape. Reshaping straight to `(B, h, T, dh)` would instead cut the flattened `(T, D)` block into $h$ chunks of $T \times d_h$ elements, mixing different positions into one "head". The shape is right and the values are nonsense, so no error is raised. The merge has the mirror-image trap: after transposing back to `(B, T, h, dh)`, `reshape` is correct. Skip the transpose and you scramble heads across positions. `ex01_vectorise_drills.py` has a test for exactly this.
 
 ### einsum
 
@@ -222,29 +222,29 @@ Fancy indexing with two index arrays pairs them elementwise. It does not form a 
 
 ### Numerical stability
 
-**Softmax.** `exp(x)` overflows when the result exceeds the largest finite float: input above about 88.7 in float32 and about 709.8 in float64. Subtracting the row max `m` leaves every exponent at most 0:
+**Softmax.** $\exp(x)$ overflows when the result exceeds the largest finite float: input above about 88.7 in float32 and about 709.8 in float64. Subtracting the row max $m$ leaves every exponent at most 0:
 
-```
-softmax(x)_i = exp(x_i - m) / sum_j exp(x_j - m)
+```math
+\operatorname{softmax}(x)_i = \frac{\exp(x_i - m)}{\sum_j \exp(x_j - m)}
 ```
 
-The factor `exp(-m)` appears in numerator and denominator and cancels, so the result is mathematically identical. The largest term is exactly 1, so the denominator is at least 1 and never zero. Example: for `[1000, 1001]` the naive version computes `inf / inf = nan`. The stable version computes `exp([-1, 0]) = [0.368, 1]` and returns `[0.269, 0.731]`.
+The factor $\exp(-m)$ appears in numerator and denominator and cancels, so the result is mathematically identical. The largest term is exactly 1, so the denominator is at least 1 and never zero. Example: for `[1000, 1001]` the naive version computes `inf / inf = nan`. The stable version computes `exp([-1, 0]) = [0.368, 1]` and returns `[0.269, 0.731]`.
 
 **Log-sum-exp.** The same shift works inside a log:
 
-```
-logsumexp(x) = m + log(sum(exp(x - m)))
+```math
+\operatorname{logsumexp}(x) = m + \log \sum_i \exp(x_i - m)
 ```
 
-For `[1000, 1000]`: `m = 1000`, the sum is `1 + 1 = 2`, and the answer is `1000 + log 2 = 1000.693`. The naive `log(sum(exp(x)))` returns `inf`.
+For `[1000, 1000]`: $m = 1000$, the sum is $1 + 1 = 2$, and the answer is $1000 + \log 2 = 1000.693$. The naive `log(sum(exp(x)))` returns `inf`.
 
 Two details matter. First, if a whole row is `-inf` (every token masked), `m = -inf` and `x - m` is `nan`. Replace a non-finite max with 0 for the shift, so the sum is 0 and the result is `-inf` instead of `nan`. Second, `log_softmax = x - logsumexp(x)` is more accurate than `log(softmax(x))`, because a probability that underflows to 0 has `log = -inf` while the log-space value is a finite large negative number.
 
-**Cross-entropy.** Never form probabilities and then take a log. Compute `-(logits[target] - logsumexp(logits))`. The gradient with respect to logits is `softmax(logits) - onehot(target)`, divided by `N` for a mean. That gradient is the reason frameworks fuse softmax and cross-entropy into one operation.
+**Cross-entropy.** Never form probabilities and then take a log. Compute `-(logits[target] - logsumexp(logits))`. The gradient with respect to logits is $\operatorname{softmax}(\text{logits}) - \operatorname{onehot}(\text{target})$, divided by $N$ for a mean. That gradient is the reason frameworks fuse softmax and cross-entropy into one operation.
 
-**softplus and logsigmoid.** `log(1 + exp(x))` overflows for large `x`. Use `max(x, 0) + log1p(exp(-|x|))`. The exponent is never positive, and `log1p` stays accurate when its argument is tiny. For `x = -50` the naive `log(1 + exp(-50))` rounds `1 + 1.9e-22` to exactly 1 and returns 0, while `log1p` returns `1.9e-22`. Then `logsigmoid(x) = -softplus(-x)` and binary cross-entropy from a raw score `z` and label `y` is `max(z, 0) - z*y + log1p(exp(-|z|))`.
+**softplus and logsigmoid.** $\log(1 + e^x)$ overflows for large $x$. Use `max(x, 0) + log1p(exp(-|x|))`. The exponent is never positive, and `log1p` stays accurate when its argument is tiny. For $x = -50$ the naive `log(1 + exp(-50))` rounds `1 + 1.9e-22` to exactly 1 and returns 0, while `log1p` returns `1.9e-22`. Then $\operatorname{logsigmoid}(x) = -\operatorname{softplus}(-x)$ and binary cross-entropy from a raw score $z$ and label $y$ is `max(z, 0) - z*y + log1p(exp(-|z|))`.
 
-**Where epsilon goes.** Layer norm divides by `sqrt(var + eps)`. The epsilon sits inside the square root. Compare `var = 1e-6` and `eps = 1e-5`: `1 / sqrt(var + eps) = 301.5`, while `1 / (sqrt(var) + eps) = 990.1`. The second form behaves differently for small variances, and it does not match what the original layer was trained with. In `rms_norm` the same rule holds with `mean(x^2)` in place of the variance. In a cosine similarity, the equivalent guard is clamping the norm, `x / max(|x|, eps)`, so a zero vector maps to a zero vector instead of `nan`.
+**Where epsilon goes.** Layer norm divides by $\sqrt{\sigma^2 + \epsilon}$. The epsilon sits inside the square root. Compare variance $\sigma^2 = 10^{-6}$ and $\epsilon = 10^{-5}$: $1 / \sqrt{\sigma^2 + \epsilon} = 301.5$, while $1 / (\sqrt{\sigma^2} + \epsilon) = 990.1$. The second form behaves differently for small variances, and it does not match what the original layer was trained with. In `rms_norm` the same rule holds with $\operatorname{mean}(x^2)$ in place of the variance. In a cosine similarity, the equivalent guard is clamping the norm, $x / \max(\lVert x \rVert, \epsilon)$, so a zero vector maps to a zero vector instead of `nan`.
 
 **dtype traps.**
 
@@ -267,7 +267,7 @@ Two details matter. First, if a whole row is `-inf` (every token masked), `m = -
 
 <details><summary>Answer</summary>
 
-`exp(x_i - m) = exp(x_i) * exp(-m)`. The factor `exp(-m)` is common to every term, so it appears in both numerator and denominator and cancels. The shift only changes the intermediate magnitudes.
+$\exp(x_i - m) = \exp(x_i) \cdot \exp(-m)$. The factor $\exp(-m)$ is common to every term, so it appears in both numerator and denominator and cancels. The shift only changes the intermediate magnitudes.
 
 </details>
 
@@ -275,7 +275,7 @@ Two details matter. First, if a whole row is `-inf` (every token masked), `m = -
 
 <details><summary>Answer</summary>
 
-Reshape preserves memory order. A `(T, D)` block laid out row by row is cut into `h` consecutive chunks of `T * dh` elements, which mixes positions across the new head axis. The correct split reshapes the last axis to `(h, dh)` first and then transposes heads in front of time.
+Reshape preserves memory order. A `(T, D)` block laid out row by row is cut into $h$ consecutive chunks of $T \times d_h$ elements, which mixes positions across the new head axis. The correct split reshapes the last axis to `(h, dh)` first and then transposes heads in front of time.
 
 </details>
 
@@ -287,34 +287,44 @@ Challenges 01, 04, 05, 06 and 07 cover the pieces of a decoder-only transformer.
 
 ### Attention
 
-Scaled dot-product attention is `softmax(Q K^T / sqrt(d_k) + mask) V`. Each query scores every key, the scores become weights, and the output is the weighted average of the values.
+Scaled dot-product attention is:
 
-A tiny worked example. One query `q = [1, 0]`, two keys `k1 = [1, 0]` and `k2 = [0, 1]`, values `v1 = [10, 0]` and `v2 = [0, 10]`, `d_k = 2`.
-
-```
-scores  = [q.k1, q.k2] / sqrt(2) = [0.7071, 0]
-weights = softmax = [0.6698, 0.3302]
-output  = 0.6698 * v1 + 0.3302 * v2 = [6.698, 3.302]
+```math
+\operatorname{Attention}(Q, K, V) = \operatorname{softmax}\left(\frac{Q K^\top}{\sqrt{d_k}} + \text{mask}\right) V
 ```
 
-**Why divide by sqrt(d_k).** Suppose query and key entries are independent with mean 0 and variance 1. A dot product is a sum of `d_k` such products, each with variance 1, so the dot product has variance `d_k` (a numpy check with `d_k = 64` gives about 64). Without scaling, the scores' spread grows with `sqrt(d_k)`. Large spreads push softmax toward one-hot, where gradients with respect to the scores are close to zero. Dividing by `sqrt(d_k)` restores unit variance. Note the head dimension `d_head`, not `d_model`. Dividing by `sqrt(d_model)` in a multi-head layer is a classic planted bug that only shows when there is more than one head.
+Each query scores every key, the scores become weights, and the output is the weighted average of the values.
 
-**Masking.** For a causal decoder, position `i` may use `j <= i`. Set masked scores to `-inf` **before** softmax. Then `exp(-inf) = 0`, and the remaining weights renormalise to sum to 1. Multiplying the weights by the mask after softmax is wrong in two ways: the rows no longer sum to 1, and the softmax denominator already included the future scores, so information from future tokens leaks into earlier outputs through the normaliser. `ex07_planted_bugs.py` contains exactly this bug and the test that exposes it.
+A tiny worked example. One query $q = [1, 0]$, two keys $k_1 = [1, 0]$ and $k_2 = [0, 1]$, values $v_1 = [10, 0]$ and $v_2 = [0, 10]$, $d_k = 2$.
+
+```math
+\begin{aligned}
+\text{scores} &= [q \cdot k_1,\ q \cdot k_2] / \sqrt{2} = [0.7071,\ 0] \\
+\text{weights} &= \operatorname{softmax}(\text{scores}) = [0.6698,\ 0.3302] \\
+\text{output} &= 0.6698\, v_1 + 0.3302\, v_2 = [6.698,\ 3.302]
+\end{aligned}
+```
+
+**Why divide by the square root of d_k.** Suppose query and key entries are independent with mean 0 and variance 1. A dot product is a sum of $d_k$ such products, each with variance 1, so the dot product has variance $d_k$ (a numpy check with $d_k = 64$ gives about 64). Without scaling, the scores' spread grows with $\sqrt{d_k}$. Large spreads push softmax toward one-hot, where gradients with respect to the scores are close to zero. Dividing by $\sqrt{d_k}$ restores unit variance. Note the head dimension $d_\text{head}$, not $d_\text{model}$. Dividing by $\sqrt{d_\text{model}}$ in a multi-head layer is a classic planted bug that only shows when there is more than one head.
+
+**Masking.** For a causal decoder, position $i$ may use $j \le i$. Set masked scores to `-inf` **before** softmax. Then $e^{-\infty} = 0$, and the remaining weights renormalise to sum to 1. Multiplying the weights by the mask after softmax is wrong in two ways: the rows no longer sum to 1, and the softmax denominator already included the future scores, so information from future tokens leaks into earlier outputs through the normaliser. `ex07_planted_bugs.py` contains exactly this bug and the test that exposes it.
 
 Padding masks work the same way but mask keys, not queries. A row where every key is masked has no valid distribution. The right result is to output zeros (or ignore that row) and make sure the implementation does not produce `nan`. See `ex04_attention_masks.py`.
 
-**Multi-head.** Splitting `D` channels into `h` heads of `dh = D / h` lets each head compute its own attention pattern at the same total cost as one wide head. The score computation costs about `T^2 * D` multiply-adds in total (summed across heads), and the score tensor has `h * T^2` entries. That quadratic memory term is what flash-style kernels avoid materialising.
+**Multi-head.** Splitting $D$ channels into $h$ heads of $d_h = D / h$ lets each head compute its own attention pattern at the same total cost as one wide head. The score computation costs about $T^2 D$ multiply-adds in total (summed across heads), and the score tensor has $h T^2$ entries. That quadratic memory term is what flash-style kernels avoid materialising.
 
 ### Normalisation
 
 LayerNorm subtracts the mean and divides by the standard deviation over the feature axis, then applies a learned gain and bias. RMSNorm drops the mean subtraction and the bias and divides by the root mean square:
 
-```
-LayerNorm(x) = (x - mean) / sqrt(var + eps) * gamma + beta
-RMSNorm(x)   = x / sqrt(mean(x^2) + eps) * gamma
+```math
+\begin{aligned}
+\operatorname{LayerNorm}(x) &= \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} \odot \gamma + \beta \\
+\operatorname{RMSNorm}(x) &= \frac{x}{\sqrt{\operatorname{mean}(x^2) + \epsilon}} \odot \gamma
+\end{aligned}
 ```
 
-For `x = [1, 2, 3, 4]`: the mean is 2.5, the variance is 1.25, so LayerNorm gives `[-1.342, -0.447, 0.447, 1.342]` (before gain and bias). The RMS is `sqrt(7.5) = 2.739`, so RMSNorm gives `[0.365, 0.730, 1.095, 1.461]`. RMSNorm keeps the sign pattern and relative magnitude but not the centring. It saves a reduction and a parameter vector, and models trained with it work as well in practice (Zhang and Sennrich, 2019).
+For $x = [1, 2, 3, 4]$: the mean is 2.5, the variance is 1.25, so LayerNorm gives `[-1.342, -0.447, 0.447, 1.342]` (before gain and bias). The RMS is $\sqrt{7.5} = 2.739$, so RMSNorm gives `[0.365, 0.730, 1.095, 1.461]`. RMSNorm keeps the sign pattern and relative magnitude but not the centring. It saves a reduction and a parameter vector, and models trained with it work as well in practice (Zhang and Sennrich, 2019).
 
 **Pre-norm versus post-norm.** The original transformer applied the norm after the residual add: `x = norm(x + sublayer(x))`. Modern models use pre-norm: `x = x + sublayer(norm(x))`. With pre-norm the residual stream is an unnormalised running sum, so gradients reach early layers along the identity path unchanged, which makes deep stacks easier to train. When asked to write a block, the wiring is the whole question: normalise the input to the sublayer, and add the sublayer output back to the **un**normalised stream. Forgetting the `x +` on either branch is the classic dropped-residual bug.
 
@@ -322,49 +332,48 @@ For `x = [1, 2, 3, 4]`: the mean is 2.5, the variance is 1.25, so LayerNorm give
 
 Attention is permutation-equivariant: shuffle the inputs and the outputs shuffle the same way. Order has to be injected.
 
-**Sinusoidal encoding** adds a fixed vector per position. Dimension pair `i` uses frequency `1 / 10000^(2i/d)`: the first pair has wavelength `2 pi` (fastest), and later pairs have longer and longer wavelengths. The model sees position as a multi-scale clock.
+**Sinusoidal encoding** adds a fixed vector per position. Dimension pair $i$ uses frequency $1 / 10000^{2i/d}$: the first pair has wavelength $2\pi$ (fastest), and later pairs have longer and longer wavelengths. The model sees position as a multi-scale clock.
 
-**RoPE (rotary embeddings)** instead rotates query and key vectors in 2-D planes, with the angle proportional to position. For a pair of coordinates at position `m` and frequency `theta`:
+**RoPE (rotary embeddings)** instead rotates query and key vectors in 2-D planes, with the angle proportional to position. For a pair of coordinates at position $m$ and frequency $\theta$:
 
-```
-[x1']   [cos(m*theta)  -sin(m*theta)] [x1]
-[x2'] = [sin(m*theta)   cos(m*theta)] [x2]
-```
-
-Treat each pair as a complex number `z = x1 + i x2`. Rotation is multiplication by `e^(i m theta)`. The attention score uses the real part of `q_m * conj(k_n)`:
-
-```
-(q e^(i m theta)) * conj(k e^(i n theta)) = q conj(k) e^(i (m - n) theta)
+```math
+\begin{pmatrix} x_1' \\ x_2' \end{pmatrix} = \begin{pmatrix} \cos m\theta & -\sin m\theta \\ \sin m\theta & \cos m\theta \end{pmatrix} \begin{pmatrix} x_1 \\ x_2 \end{pmatrix}
 ```
 
-The absolute positions cancel and only `m - n` remains. The score therefore depends on the **relative** offset, which is the reason RoPE is applied to q and k and not to v. Rotations preserve norm, so the vector magnitude is untouched. A numerical check with `q = (1, 2)`, `k = (3, -1)`, `theta = 0.3`: the dot product of rotated vectors at positions 5 and 3 is -3.1272, and at positions 12 and 10 (same offset 2) it is -3.1272 again. Frequencies follow `theta_i = base^(-2i/d)` with `base = 10000` as a common choice, so low pairs rotate quickly (fine position) and high pairs slowly (coarse position).
+Treat each pair as a complex number $z = x_1 + i x_2$. Rotation is multiplication by $e^{i m \theta}$. The attention score uses the real part of $q_m \overline{k_n}$:
+
+```math
+\left(q\, e^{i m \theta}\right) \overline{\left(k\, e^{i n \theta}\right)} = q\, \bar{k}\, e^{i (m - n) \theta}
+```
+
+The absolute positions cancel and only $m - n$ remains. The score therefore depends on the **relative** offset, which is the reason RoPE is applied to q and k and not to v. Rotations preserve norm, so the vector magnitude is untouched. A numerical check with $q = (1, 2)$, $k = (3, -1)$, $\theta = 0.3$: the dot product of rotated vectors at positions 5 and 3 is -3.1272, and at positions 12 and 10 (same offset 2) it is -3.1272 again. Frequencies follow $\theta_i = \text{base}^{-2i/d}$ with $\text{base} = 10000$ as a common choice, so low pairs rotate quickly (fine position) and high pairs slowly (coarse position).
 
 ### The mini GPT forward pass
 
-A decoder-only block, repeated `L` times, is:
+A decoder-only block, repeated $L$ times, is:
 
-```
+```python
 x = x + attention(norm(x))
 x = x + mlp(norm(x))
 ```
 
 framed by a token embedding (plus positional information, or RoPE inside attention) at the bottom and a final norm and projection to vocabulary logits at the top. With weight tying the output projection is the transpose of the embedding matrix, so `logits = h @ emb.T`.
 
-Where the parameters and FLOPs live: per layer, attention has `4 d^2` parameters (q, k, v, o) and a standard MLP with a 4x hidden size has `8 d^2` (up and down projections). That is `12 d^2` per layer. For `d = 768` and `L = 12`: `12 * 768^2 * 12 = 84.9M` non-embedding parameters, plus a `50,257 x 768` embedding of 38.6M, about 123.5M in total, the GPT-2 small size. Forward FLOPs are roughly 2 per parameter per token (one multiply, one add), so about `2 * 85M = 170 MFLOPs` per token for the layers, plus an attention term that grows with context length: `4 * T * d` FLOPs per token per layer for scores and weighted sums. At short context the MLP and projections dominate. At long context the attention term takes over.
+Where the parameters and FLOPs live: per layer, attention has $4 d^2$ parameters (q, k, v, o) and a standard MLP with a 4x hidden size has $8 d^2$ (up and down projections). That is $12 d^2$ per layer. For $d = 768$ and $L = 12$: $12 \times 768^2 \times 12 = 84.9\text{M}$ non-embedding parameters, plus a $50{,}257 \times 768$ embedding of 38.6M, about 123.5M in total, the GPT-2 small size. Forward FLOPs are roughly 2 per parameter per token (one multiply, one add), so about $2 \times 85\text{M} = 170\text{ MFLOPs}$ per token for the layers, plus an attention term that grows with context length: $4Td$ FLOPs per token per layer for scores and weighted sums. At short context the MLP and projections dominate. At long context the attention term takes over.
 
 ### KV cache
 
-Without a cache, generating token `t + 1` recomputes keys and values for all `t` earlier tokens, although they cannot have changed (causal attention never lets earlier positions see later ones). With a cache you compute `k, v` for the new token only, append them, and attend from the single new query to all cached keys.
+Without a cache, generating token $t + 1$ recomputes keys and values for all $t$ earlier tokens, although they cannot have changed (causal attention never lets earlier positions see later ones). With a cache you compute $k$ and $v$ for the new token only, append them, and attend from the single new query to all cached keys.
 
-Cost accounting. Let `T` be the final length. Without a cache, step `t` runs the projections and MLP over `t` tokens, so the total is `1 + 2 + ... + T = T(T + 1) / 2` token-forwards. For `T = 100` that is 5,050. With a cache the total is 100, a 50-fold reduction in projection and MLP work. Attention itself still reads all `t` cached entries at step `t`, so its cost per step is `O(t d)` and `O(T^2 d)` over the generation, but the dominant cost moves from compute to **memory reads**: every step streams the cache from memory.
+Cost accounting. Let $T$ be the final length. Without a cache, step $t$ runs the projections and MLP over $t$ tokens, so the total is $1 + 2 + \dots + T = T(T + 1) / 2$ token-forwards. For $T = 100$ that is 5,050. With a cache the total is 100, a 50-fold reduction in projection and MLP work. Attention itself still reads all $t$ cached entries at step $t$, so its cost per step is $O(t d)$ and $O(T^2 d)$ over the generation, but the dominant cost moves from compute to **memory reads**: every step streams the cache from memory.
 
 Memory. Per token the cache holds K and V for each layer:
 
-```
-bytes per token = 2 * layers * kv_heads * head_dim * bytes_per_value
+```math
+\text{bytes per token} = 2 \times \text{layers} \times \text{kv\_heads} \times \text{head\_dim} \times \text{bytes\_per\_value}
 ```
 
-For a 7B-class shape (32 layers, 32 KV heads, head dim 128, fp16) that is `2 * 32 * 32 * 128 * 2 = 524,288` bytes, 0.5 MiB per token, so a 4,096-token sequence needs 2 GiB. With grouped-query attention and 8 KV heads the same model needs 0.5 GiB. This is why serving capacity is usually limited by KV memory, not weights, once batches grow.
+For a 7B-class shape (32 layers, 32 KV heads, head dim 128, fp16) that is $2 \times 32 \times 32 \times 128 \times 2 = 524{,}288$ bytes, 0.5 MiB per token, so a 4,096-token sequence needs 2 GiB. With grouped-query attention and 8 KV heads the same model needs 0.5 GiB. This is why serving capacity is usually limited by KV memory, not weights, once batches grow.
 
 What an implementation must get right:
 
@@ -387,7 +396,7 @@ Rows no longer sum to 1, so outputs are scaled down, and the softmax denominator
 
 <details><summary>Answer</summary>
 
-Rotating q by `m * theta` and k by `n * theta` makes their inner product depend on `(m - n) * theta` only, because a rotation by `a` followed by the inverse of a rotation by `b` is a rotation by `a - b`. The absolute positions cancel.
+Rotating $q$ by $m \theta$ and $k$ by $n \theta$ makes their inner product depend on $(m - n) \theta$ only, because a rotation by $a$ followed by the inverse of a rotation by $b$ is a rotation by $a - b$. The absolute positions cancel.
 
 </details>
 
@@ -395,7 +404,7 @@ Rotating q by `m * theta` and k by `n * theta` makes their inner product depend 
 
 <details><summary>Answer</summary>
 
-`2 * 24 * 16 * 64 * 2 = 98,304` bytes, 96 KiB per token. A 2,048-token sequence needs 192 MiB.
+$2 \times 24 \times 16 \times 64 \times 2 = 98{,}304$ bytes, 96 KiB per token. A 2,048-token sequence needs 192 MiB.
 
 </details>
 
@@ -423,32 +432,32 @@ The standard order of operations on a logit vector:
 4. Softmax over what is left (this renormalises).
 5. Draw one token.
 
-**Temperature.** `softmax(logits / T)`. As `T -> 0` the distribution approaches one-hot at the argmax, so implement `T = 0` as greedy and do not divide by zero. As `T -> infinity` it approaches uniform. Temperature goes before truncation because it changes which tokens fall inside the nucleus: a lower `T` shrinks it.
+**Temperature.** $\operatorname{softmax}(\text{logits} / T)$. As $T \to 0$ the distribution approaches one-hot at the argmax, so implement $T = 0$ as greedy and do not divide by zero. As $T \to \infty$ it approaches uniform. Temperature goes before truncation because it changes which tokens fall inside the nucleus: a lower $T$ shrinks it.
 
-**Top-k** keeps the `k` highest logits. Handle `k >= V` (keep all) and `k = 1` (greedy). **Top-p (nucleus)** keeps the smallest set of top tokens whose cumulative probability reaches `p`. Worked example with probabilities `[0.5, 0.3, 0.1, 0.06, 0.04]` and `p = 0.85`:
+**Top-k** keeps the $k$ highest logits. Handle $k \ge V$ (keep all) and $k = 1$ (greedy). **Top-p (nucleus)** keeps the smallest set of top tokens whose cumulative probability reaches $p$. Worked example with probabilities `[0.5, 0.3, 0.1, 0.06, 0.04]` and $p = 0.85$:
 
-```
+```text
 sorted cumulative:   0.5   0.8   0.9   0.96   1.0
 cumulative BEFORE:   0     0.5   0.8   0.9    0.96
 keep if before < p:  yes   yes   yes   no     no
 renormalised:        0.5/0.9 = 0.556, 0.333, 0.111
 ```
 
-The rule "keep while the cumulative mass **before** this token is below `p`" is the clean form. It keeps the token that crosses the threshold, always keeps the top token even for tiny `p`, and needs no special case for the first element. `p = 1` keeps everything, but a float cumulative sum may reach 0.9999999 and drop real tokens, so treat `p >= 1` as "no filter".
+The rule "keep while the cumulative mass **before** this token is below `p`" is the clean form. It keeps the token that crosses the threshold, always keeps the top token even for tiny $p$, and needs no special case for the first element. Setting $p = 1$ keeps everything, but a float cumulative sum may reach 0.9999999 and drop real tokens, so treat $p \ge 1$ as "no filter".
 
 **Min-p** keeps tokens with `prob >= min_p * max_prob`, so the cut scales with the model's confidence. **Repetition penalty** divides positive logits and multiplies negative logits by the penalty, so that both move toward "less likely" (dividing a negative logit would make it less negative, which is the opposite of what you want).
 
-**Vectorising over a batch** (see `ex03_topp_batch.py`): `argsort` descending (stable), `take_along_axis` to get sorted probabilities, `cumsum` minus the element itself, compare against a per-row `p` with broadcasting, then scatter the keep mask back to vocabulary order with `put_along_axis`. Sampling is inverse-CDF: take the cumulative distribution, draw one uniform `u` per row, and the sampled index is the count of entries with `cdf <= u`. Using `<=` means a token with zero probability can never be chosen, even if `u` is exactly 0.
+**Vectorising over a batch** (see `ex03_topp_batch.py`): `argsort` descending (stable), `take_along_axis` to get sorted probabilities, `cumsum` minus the element itself, compare against a per-row `p` with broadcasting, then scatter the keep mask back to vocabulary order with `put_along_axis`. Sampling is inverse-CDF: take the cumulative distribution, draw one uniform $u$ per row, and the sampled index is the count of entries with `cdf <= u`. Using `<=` means a token with zero probability can never be chosen, even if `u` is exactly 0.
 
-Testing a sampler means testing a distribution. Compare against a loop reference for the *filter*, then for the draw check empirical frequencies against the analytic distribution with a fixed seed and a tolerance of about 4 standard errors (`sqrt(p(1-p)/n)`).
+Testing a sampler means testing a distribution. Compare against a loop reference for the *filter*, then for the draw check empirical frequencies against the analytic distribution with a fixed seed and a tolerance of about 4 standard errors, where one standard error is $\sqrt{p(1-p)/n}$.
 
 ### Beam search
 
-Greedy decoding picks the best token each step and can walk into a poor sequence. Beam search keeps the `B` best partial sequences by total log-probability.
+Greedy decoding picks the best token each step and can walk into a poor sequence. Beam search keeps the $B$ best partial sequences by total log-probability.
 
 A worked case. Step 1: token A has probability 0.6 and B has 0.4. After A, the next-token distribution is nearly flat: `x 0.34, y 0.33, z 0.33`. After B, one token `w` has probability 0.9.
 
-```
+```text
 Greedy:   A (0.6), then x (0.34)  -> 0.6 * 0.34 = 0.204
 Beam B=2: keeps A and B, then expands both:
           B, w -> 0.4 * 0.9 = 0.36        <- best full sequence
@@ -458,11 +467,11 @@ Greedy commits to A because it is locally best. Beam search with width 2 keeps B
 
 Mechanics to get right:
 
-- **Add log-probabilities.** Products of many probabilities underflow. Scores are sums of `log p`.
-- **Select from the flattened candidates.** Each beam proposes `V` continuations, giving `B x V` candidates. Take the top `B` of the *flattened* `B x V` scores, then recover `beam = idx // V` and `token = idx % V`. Taking the top `B` per beam and then merging is a different algorithm and gives the wrong set.
+- **Add log-probabilities.** Products of many probabilities underflow. Scores are sums of $\log p$.
+- **Select from the flattened candidates.** Each beam proposes $V$ continuations, giving $B \times V$ candidates. Take the top $B$ of the *flattened* $B \times V$ scores, then recover `beam = idx // V` and `token = idx % V`. Taking the top $B$ per beam and then merging is a different algorithm and gives the wrong set.
 - **Park finished beams.** When a beam emits EOS, move it to a finished list and do not extend it. Otherwise it keeps accumulating log-probability penalties, or you extend a finished sequence. Stop when the best finished score cannot be beaten by any live beam, or at max length.
-- **Length normalisation.** Raw log-probability always prefers short sequences, because each extra token multiplies in a probability below 1. Dividing by length or by a length penalty fixes the bias. With plain per-token normalisation, a sequence with total log-prob -2.0 over 4 tokens scores -0.50, which beats -1.5 over 2 tokens at -0.75, although the raw sums favour the short one. The GNMT penalty is `((5 + length) / 6)^alpha`: with `alpha = 1`, the same sequences score -1.333 and -1.286, a milder correction. `alpha` is a tuning parameter, so be ready to say which direction it pushes.
-- **Cost.** Each step runs the model for `B` beams and a top-k over `B x V`, so time is about `B` times greedy and memory for caches is `B` times as large, with copy-on-fork for shared prefixes.
+- **Length normalisation.** Raw log-probability always prefers short sequences, because each extra token multiplies in a probability below 1. Dividing by length or by a length penalty fixes the bias. With plain per-token normalisation, a sequence with total log-prob -2.0 over 4 tokens scores -0.50, which beats -1.5 over 2 tokens at -0.75, although the raw sums favour the short one. The GNMT penalty is $((5 + \text{length}) / 6)^\alpha$: with $\alpha = 1$, the same sequences score -1.333 and -1.286, a milder correction. The exponent $\alpha$ is a tuning parameter, so be ready to say which direction it pushes.
+- **Cost.** Each step runs the model for $B$ beams and a top-k over $B \times V$, so time is about $B$ times greedy and memory for caches is $B$ times as large, with copy-on-fork for shared prefixes.
 
 Failure modes: beam search maximises likelihood, and for open-ended generation the most likely text is often repetitive and bland. It suits tasks with a narrow correct answer (translation, structured output) and is a poor default for creative text.
 
@@ -470,7 +479,7 @@ Failure modes: beam search maximises likelihood, and for open-ended generation t
 
 To force output to match a grammar or JSON schema, track a parser state and, at every step, **mask the logits of tokens that would make the output invalid**, then softmax and sample. Because masked logits are `-inf`, probability mass moves to the allowed tokens in proportion to their original weights.
 
-Worked example. At some state only `b` and `c` are legal. The model's raw probabilities are `a 0.5, b 0.3, c 0.2`. After masking `a` and renormalising: `b = 0.3 / 0.5 = 0.6`, `c = 0.4`. If instead the model had put `b = 1e-6` and `c = 1e-7` and nearly all mass on `a`, the renormalised choice is still 0.91 for `b`, but the model "wanted" something else, so the output is valid but low quality. Constrained decoding guarantees syntax, not meaning. This is also why it **shifts the distribution**: the conditional distribution of the whole output is not the model's distribution conditioned on validity, because mass is renormalised greedily at each step without looking ahead.
+Worked example. At some state only `b` and `c` are legal. The model's raw probabilities are `a 0.5, b 0.3, c 0.2`. After masking `a` and renormalising: $b = 0.3 / 0.5 = 0.6$, $c = 0.4$. If instead the model had put $b = 10^{-6}$ and $c = 10^{-7}$ and nearly all mass on `a`, the renormalised choice is still 0.91 for `b`, but the model "wanted" something else, so the output is valid but low quality. Constrained decoding guarantees syntax, not meaning. This is also why it **shifts the distribution**: the conditional distribution of the whole output is not the model's distribution conditioned on validity, because mass is renormalised greedily at each step without looking ahead.
 
 Design points:
 
@@ -480,7 +489,7 @@ Design points:
 
 ### Speculative decoding
 
-A big target model is slow at batch size 1 because each token requires streaming all the weights from memory, with very little arithmetic per byte. The idea: let a small draft model propose `gamma` tokens cheaply, then have the target score **all of them in one forward pass**. That pass costs about the same as generating one token, because it is memory-bound, so every accepted draft token is nearly free.
+A big target model is slow at batch size 1 because each token requires streaming all the weights from memory, with very little arithmetic per byte. The idea: let a small draft model propose $\gamma$ tokens cheaply, then have the target score **all of them in one forward pass**. That pass costs about the same as generating one token, because it is memory-bound, so every accepted draft token is nearly free.
 
 ```mermaid
 sequenceDiagram
@@ -495,27 +504,35 @@ sequenceDiagram
     T->>O: all accepted: add bonus token from p(g+1)
 ```
 
-**The acceptance rule.** For each drafted token `x` at position `i`, draw `u ~ U(0, 1)` and accept if `u < min(1, p(x) / q(x))`, where `p` is the target and `q` the draft probability of `x`. On the first rejection, discard the rest of the draft and sample one token from the **residual distribution** `norm(max(p - q, 0))`. If all `gamma` are accepted, sample a bonus token from the target's distribution at position `gamma + 1`, which the same pass already computed. Each step therefore emits between 1 and `gamma + 1` tokens.
+**The acceptance rule.** For each drafted token $x$ at position $i$, draw $u \sim U(0, 1)$ and accept if $u \lt \min(1, p(x) / q(x))$, where $p$ is the target and $q$ the draft probability of $x$. On the first rejection, discard the rest of the draft and sample one token from the **residual distribution** $\operatorname{norm}(\max(p - q, 0))$. If all $\gamma$ are accepted, sample a bonus token from the target's distribution at position $\gamma + 1$, which the same pass already computed. Each step therefore emits between 1 and $\gamma + 1$ tokens.
 
-**Why it is lossless.** The claim: the emitted token is distributed exactly as `p`. For any token `t`:
+**Why it is lossless.** The claim: the emitted token is distributed exactly as $p$. For any token $t$:
 
-```
-P(emit t) = P(draft proposes t and accepted) + P(reject) * residual(t)
-          = q(t) * min(1, p(t) / q(t))      + P(reject) * residual(t)
-          = min(q(t), p(t))                 + P(reject) * residual(t)
-```
-
-The probability of rejection is the total mass the draft over-proposed: `P(reject) = 1 - sum_t min(p(t), q(t)) = sum_t max(p(t) - q(t), 0)`. The residual is `max(p(t) - q(t), 0)` divided by exactly that sum, so `P(reject) * residual(t) = max(p(t) - q(t), 0)`. Then:
-
-```
-P(emit t) = min(p(t), q(t)) + max(p(t) - q(t), 0) = p(t)
+```math
+\begin{aligned}
+P(\text{emit } t) &= P(\text{draft proposes } t \text{ and accepted}) + P(\text{reject}) \cdot \text{residual}(t) \\
+&= q(t) \cdot \min\left(1, \frac{p(t)}{q(t)}\right) + P(\text{reject}) \cdot \text{residual}(t) \\
+&= \min(q(t), p(t)) + P(\text{reject}) \cdot \text{residual}(t)
+\end{aligned}
 ```
 
-Numbers: `p = [0.5, 0.3, 0.2]`, `q = [0.2, 0.5, 0.3]`. The acceptance mass is `sum min(p, q) = 0.2 + 0.3 + 0.2 = 0.7`, so rejection has probability 0.3. The residual `max(p - q, 0) = [0.3, 0, 0]` normalises to `[1, 0, 0]`. Then token 0 is emitted with probability `0.2 * 1 + 0.3 * 1 = 0.5`. Token 1: `0.5 * min(1, 0.3 / 0.5) = 0.3`. Token 2: `0.3 * min(1, 0.2 / 0.3) = 0.2`. The result `[0.5, 0.3, 0.2]` equals `p`. The sampler is exact, with no quality trade-off, provided every draft step's `q` is the one actually used to sample.
+The probability of rejection is the total mass the draft over-proposed:
 
-Two things that look similar are wrong. Resampling from `p` (not the residual) after a rejection double-counts the tokens the draft already covers, so output drifts toward what the draft over-proposes and nothing crashes. Accepting when the draft's token equals the target's argmax is valid only for greedy decoding.
+```math
+P(\text{reject}) = 1 - \sum_t \min(p(t), q(t)) = \sum_t \max(p(t) - q(t), 0)
+```
 
-**Speedup arithmetic.** If each token is accepted independently with probability `a`, expected tokens per step are `(1 - a^(gamma + 1)) / (1 - a)`. With `a = 0.7`: `gamma = 1` gives 1.70, `gamma = 2` gives 2.19, `gamma = 4` gives 2.77, `gamma = 8` gives 3.20, and the limit is `1 / (1 - a) = 3.33`. If drafting one token costs a fraction `c` of a target pass, a step costs `1 + gamma * c`. With `c = 0.05` and `gamma = 4`: `2.77 / 1.2 = 2.31x` speedup over plain decoding. Past some `gamma` the extra drafts cost more than they add.
+The residual is $\max(p(t) - q(t), 0)$ divided by exactly that sum, so $P(\text{reject}) \cdot \text{residual}(t) = \max(p(t) - q(t), 0)$. Then:
+
+```math
+P(\text{emit } t) = \min(p(t), q(t)) + \max(p(t) - q(t), 0) = p(t)
+```
+
+Numbers: $p = [0.5, 0.3, 0.2]$, $q = [0.2, 0.5, 0.3]$. The acceptance mass is $\sum \min(p, q) = 0.2 + 0.3 + 0.2 = 0.7$, so rejection has probability 0.3. The residual $\max(p - q, 0) = [0.3, 0, 0]$ normalises to $[1, 0, 0]$. Then token 0 is emitted with probability $0.2 \times 1 + 0.3 \times 1 = 0.5$. Token 1: $0.5 \times \min(1, 0.3 / 0.5) = 0.3$. Token 2: $0.3 \times \min(1, 0.2 / 0.3) = 0.2$. The result $[0.5, 0.3, 0.2]$ equals $p$. The sampler is exact, with no quality trade-off, provided every draft step's $q$ is the one actually used to sample.
+
+Two things that look similar are wrong. Resampling from $p$ (not the residual) after a rejection double-counts the tokens the draft already covers, so output drifts toward what the draft over-proposes and nothing crashes. Accepting when the draft's token equals the target's argmax is valid only for greedy decoding.
+
+**Speedup arithmetic.** If each token is accepted independently with probability $a$, expected tokens per step are $(1 - a^{\gamma + 1}) / (1 - a)$. With $a = 0.7$: $\gamma = 1$ gives 1.70, $\gamma = 2$ gives 2.19, $\gamma = 4$ gives 2.77, $\gamma = 8$ gives 3.20, and the limit is $1 / (1 - a) = 3.33$. If drafting one token costs a fraction $c$ of a target pass, a step costs $1 + \gamma c$. With $c = 0.05$ and $\gamma = 4$: $2.77 / 1.2 = 2.31$, a 2.31x speedup over plain decoding. Past some $\gamma$ the extra drafts cost more than they add.
 
 It is a **bandwidth** optimisation, not a FLOPs optimisation. Total FLOPs rise, because rejected draft work is wasted. Latency falls because the extra arithmetic fits into the idle compute of a memory-bound pass. At large batch sizes the target pass becomes compute-bound, the spare arithmetic disappears, and speculation can reduce throughput.
 
@@ -533,15 +550,15 @@ Temperature reshapes the probabilities, and top-p is defined on those probabilit
 
 <details><summary>Answer</summary>
 
-150,000. Flatten the `3 x 50,000` score matrix, take the top 3 overall, and recover the source beam as `idx // 50000` and the token as `idx % 50000`. Selecting per beam first gives a different, worse set.
+150,000. Flatten the $3 \times 50{,}000$ score matrix, take the top 3 overall, and recover the source beam as `idx // 50000` and the token as `idx % 50000`. Selecting per beam first gives a different, worse set.
 
 </details>
 
-3. A draft proposes token `t` with `q(t) = 0.4` and the target has `p(t) = 0.1`. What is the acceptance probability, and what happens on rejection?
+3. A draft proposes token $t$ with $q(t) = 0.4$ and the target has $p(t) = 0.1$. What is the acceptance probability, and what happens on rejection?
 
 <details><summary>Answer</summary>
 
-`min(1, 0.1 / 0.4) = 0.25`. On rejection the rest of the draft is discarded and one token is sampled from `norm(max(p - q, 0))`, which puts weight only on tokens the target likes more than the draft does.
+$\min(1, 0.1 / 0.4) = 0.25$. On rejection the rest of the draft is discarded and one token is sampled from $\operatorname{norm}(\max(p - q, 0))$, which puts weight only on tokens the target likes more than the draft does.
 
 </details>
 
@@ -557,7 +574,7 @@ Start with the text as a sequence of symbols (bytes, in byte-level BPE, so the b
 
 Worked example on `aaabdaaabac` (11 symbols):
 
-```
+```text
 pair counts: (a,a)=4  (a,b)=2  (b,d)=1  (d,a)=1  (b,a)=1  (a,c)=1
 merge 1: (a,a) -> X       X a b d X a b a c      (9 symbols)
 pair counts now: (X,a)=2  (a,b)=2  (b,d)=1  (d,X)=1  (b,a)=1  (a,c)=1
@@ -565,7 +582,7 @@ pair counts now: (X,a)=2  (a,b)=2  (b,d)=1  (d,X)=1  (b,a)=1  (a,c)=1
 
 Now `(X, a)` and `(a, b)` tie at 2. The choice has to be deterministic, for example the smallest pair by id, or the earliest pair first seen. Without a fixed rule two runs of your trainer produce different vocabularies, and a test that checks merges becomes flaky. Choosing `(X, a) -> Y` gives `Y b d Y b a c` (7 symbols).
 
-Counting pairs from scratch each round costs `O(n)` per merge, so `O(n * merges)` overall. Production trainers keep pair counts in a priority structure and update counts locally after each merge. Say this in an interview and implement the simple version.
+Counting pairs from scratch each round costs $O(n)$ per merge, so $O(n \cdot \text{merges})$ overall. Production trainers keep pair counts in a priority structure and update counts locally after each merge. Say this in an interview and implement the simple version.
 
 ### Encoding is by merge rank, not greedy longest match
 
@@ -573,7 +590,7 @@ To encode new text, start from bytes and repeatedly apply the **earliest-learned
 
 This differs from "match the longest token at each position". Suppose the vocabulary has `ab` (merge rank 2) and `bc` (merge rank 1). For `abc`:
 
-```
+```text
 BPE by rank:    bc is rank 1, so merge first -> a, bc        -> [a][bc]
 Longest match:  ab is the longest token starting at 0 -> [ab][c]
 ```
@@ -626,21 +643,27 @@ Challenges 08, 09, 16 and 17 build the retrieval path: chunk, embed, search, fus
 
 ### Search
 
-Normalise vectors once at index time. Then cosine similarity is a dot product and a whole query is one matrix-vector product, `scores = index @ q`. For the top `k` of `N` scores do not sort everything: `np.argpartition(-scores, k)[:k]` selects them in `O(N)`, then sort only those `k`. Clamp `k` to `N`, and decide the tie rule (lowest id). Test with a document equal to the query (score 1.0, rank 1) and with an empty index.
+Normalise vectors once at index time. Then cosine similarity is a dot product and a whole query is one matrix-vector product, `scores = index @ q`. For the top $k$ of $N$ scores do not sort everything: `np.argpartition(-scores, k)[:k]` selects them in $O(N)$, then sort only those $k$. Clamp $k$ to $N$, and decide the tie rule (lowest id). Test with a document equal to the query (score 1.0, rank 1) and with an empty index.
 
 ### Chunking
 
-A sliding window with `size` and `overlap` advances by `stride = size - overlap`. If `stride <= 0` the loop never advances, so validate and raise. For 1,000 characters, `size = 200`, `overlap = 50`, the stride is 150, the starts are 0, 150, ..., 750, and a final chunk at 900 reaches the end: 7 chunks. Indexed text is 7 x 200 = 1,400 characters for 1,000 of source, a 40% inflation, so overlap has a storage and cost price. The tests that matter are coverage (every character appears in some chunk), exactness (consecutive chunks overlap by exactly `overlap` except at the end) and no tail duplicate (do not emit a final chunk fully contained in the previous one). Sentence and recursive chunkers split on a priority list of separators (paragraph, line, sentence, space, character) and keep the separators, so that joining the pieces rebuilds the text. A single sentence longer than the limit needs a fallback split.
+A sliding window with `size` and `overlap` advances by `stride = size - overlap`. If `stride <= 0` the loop never advances, so validate and raise. For 1,000 characters, `size = 200`, `overlap = 50`, the stride is 150, the starts are 0, 150, ..., 750, and a final chunk at 900 reaches the end: 7 chunks. Indexed text is $6 \times 200 + 100 = 1{,}300$ characters for 1,000 of source, a 30% inflation, so overlap has a storage and cost price. The tests that matter are coverage (every character appears in some chunk), exactness (consecutive chunks overlap by exactly `overlap` except at the end) and no tail duplicate (do not emit a final chunk fully contained in the previous one). Sentence and recursive chunkers split on a priority list of separators (paragraph, line, sentence, space, character) and keep the separators, so that joining the pieces rebuilds the text. A single sentence longer than the limit needs a fallback split.
 
 ### Hybrid search
 
-BM25 scores a term in a document as `idf * tf * (k1 + 1) / (tf + k1 * (1 - b + b * len / avglen))`, with `idf = ln(1 + (N - df + 0.5) / (df + 0.5))`. Take three documents of lengths 3, 9 and 2 (average 4.67), `k1 = 1.5`, `b = 0.75`, and the term "cat" appearing in two of them: `idf = 0.470`. A 3-token document with one "cat" scores 0.560. A 9-token document with three "cat" scores 0.636. Tripling the count and tripling the length raised the score only 14%, which is term-frequency saturation plus length normalisation.
+BM25 scores a term in a document as:
 
-Lexical and dense scores live on different scales, so fuse **ranks**. Reciprocal rank fusion scores `sum over lists of 1 / (k + rank)`, usually `k = 60`. If dense ranks A, B, C and BM25 ranks C, A, D: `A = 1/61 + 1/62 = 0.03252`, `C = 1/63 + 1/61 = 0.03227`, `B = 0.01613`, `D = 0.01587`. The order is A, C, B, D. A document ranked well by both beats one ranked first by only one, and no score calibration is needed. MMR then picks results greedily by `lambda * relevance - (1 - lambda) * max similarity to already chosen`, trading relevance for diversity.
+```math
+\text{score} = \text{idf} \cdot \frac{\text{tf} \cdot (k_1 + 1)}{\text{tf} + k_1 \left(1 - b + b \cdot \frac{\text{len}}{\text{avglen}}\right)}, \qquad \text{idf} = \ln\left(1 + \frac{N - \text{df} + 0.5}{\text{df} + 0.5}\right)
+```
+
+Take three documents of lengths 3, 9 and 2 (average 4.67), $k_1 = 1.5$, $b = 0.75$, and the term "cat" appearing in two of them: $\text{idf} = 0.470$. A 3-token document with one "cat" scores 0.560. A 9-token document with three "cat" scores 0.636. Tripling the count and tripling the length raised the score only 14%, which is term-frequency saturation plus length normalisation.
+
+Lexical and dense scores live on different scales, so fuse **ranks**. Reciprocal rank fusion scores $\sum_{\text{lists}} 1 / (k + \text{rank})$, usually $k = 60$. If dense ranks A, B, C and BM25 ranks C, A, D: $A = 1/61 + 1/62 = 0.03252$, $C = 1/63 + 1/61 = 0.03227$, $B = 0.01613$, $D = 0.01587$. The order is A, C, B, D. A document ranked well by both beats one ranked first by only one, and no score calibration is needed. MMR then picks results greedily by $\lambda \cdot \text{relevance} - (1 - \lambda) \cdot \max(\text{similarity to already chosen})$, trading relevance for diversity.
 
 ### Semantic cache
 
-Two tiers. Exact: a hash of everything that determines the answer (model and version, prompt template version, normalised prompt, sampling parameters, tenant). Semantic: embed the query and return a stored answer if cosine similarity exceeds a threshold. The threshold is a business decision: "How do I reset my password?" and "How do I reset my router?" can be very close in embedding space and need different answers. Expected cost per request is roughly `lookup + (1 - hit_rate) * llm_cost`, but a false hit has its own cost, wrong answers served confidently. Entries need a TTL, an LRU bound (`OrderedDict.move_to_end` on hit, `popitem(last=False)` on overflow), and tag-based invalidation so a document update evicts every answer derived from it. Cache keys without the prompt and model version serve stale answers after a deployment.
+Two tiers. Exact: a hash of everything that determines the answer (model and version, prompt template version, normalised prompt, sampling parameters, tenant). Semantic: embed the query and return a stored answer if cosine similarity exceeds a threshold. The threshold is a business decision: "How do I reset my password?" and "How do I reset my router?" can be very close in embedding space and need different answers. Expected cost per request is roughly $\text{lookup} + (1 - \text{hit rate}) \cdot \text{LLM cost}$, but a false hit has its own cost, wrong answers served confidently. Entries need a TTL, an LRU bound (`OrderedDict.move_to_end` on hit, `popitem(last=False)` on overflow), and tag-based invalidation so a document update evicts every answer derived from it. Cache keys without the prompt and model version serve stale answers after a deployment.
 
 ### Check yourself
 
@@ -648,7 +671,7 @@ Two tiers. Exact: a hash of everything that determines the answer (model and ver
 
 <details><summary>Answer</summary>
 
-BM25 scores are unbounded and corpus-dependent, while cosine lies in [-1, 1]. Mixing them needs a calibration that breaks as the corpus changes. Ranks are comparable across systems and need no tuning.
+BM25 scores are unbounded and corpus-dependent, while cosine lies in $[-1, 1]$. Mixing them needs a calibration that breaks as the corpus changes. Ranks are comparable across systems and need no tuning.
 
 </details>
 
@@ -683,7 +706,7 @@ def allow(self, n=1):
 
 With capacity 10 and rate 2 per second, 15 simultaneous requests let 10 through. After 2 s the bucket holds 4. The sustained rate is 2 per second and the largest burst is 10. The wait for `n` missing tokens is `(n - tokens) / rate`. Use a monotonic clock, and guard shared state with a lock in threaded code. LLM providers limit tokens per minute as well as requests, so the cost `n` is the request's token estimate.
 
-Retries need three rules. Retry only errors that can succeed later (429, 5xx, timeouts). Wait `uniform(0, min(cap, base * 2^attempt))` (full jitter), because fixed or purely exponential waits make 1,000 failed clients retry at the same instant. Cap the total: a retry budget, a deadline, and a single retrying layer, since three layers each making 3 attempts send 27 calls to a failing service. Honour `Retry-After` when present.
+Retries need three rules. Retry only errors that can succeed later (429, 5xx, timeouts). Wait $U(0, \min(\text{cap}, \text{base} \cdot 2^{\text{attempt}}))$ (full jitter), because fixed or purely exponential waits make 1,000 failed clients retry at the same instant. Cap the total: a retry budget, a deadline, and a single retrying layer, since three layers each making 3 attempts send 27 calls to a failing service. Honour `Retry-After` when present.
 
 ### Streaming parser
 
@@ -733,13 +756,13 @@ The model can often recover (fix an argument, try another tool), and the transcr
 
 ### LoRA
 
-For a frozen weight `W (d, k)`, LoRA learns a low-rank update: `y = x W + (alpha / r) * (x A) B`, with `A (d, r)` random and `B (r, k)` zero. At step 0 the update is exactly zero, so the model equals the pretrained one. Why not zero both? The gradient to `B` is proportional to `(x A)^T`, and the gradient to `A` is proportional to `B^T`. With `B = 0` the gradient to `A` is zero at step 0 but `B` gets a signal, and after one step `B` is nonzero so `A` learns. With both zero, both gradients stay zero forever.
+For a frozen weight $W \in \mathbb{R}^{d \times k}$, LoRA learns a low-rank update: $y = x W + \tfrac{\alpha}{r} (x A) B$, with $A \in \mathbb{R}^{d \times r}$ random and $B \in \mathbb{R}^{r \times k}$ zero. At step 0 the update is exactly zero, so the model equals the pretrained one. Why not zero both? The gradient to $B$ is proportional to $(x A)^\top$, and the gradient to $A$ is proportional to $B^\top$. With $B = 0$ the gradient to $A$ is zero at step 0 but $B$ gets a signal, and after one step $B$ is nonzero so $A$ learns. With both zero, both gradients stay zero forever.
 
-Cost: `d = k = 4096`, `r = 8`: `8 * (4096 + 4096) = 65,536` trainable values against `16,777,216` frozen, 0.39%. Keep the two thin matmuls in the forward pass. Forming `A @ B` each time builds a full `d x k` matrix and discards the saving. Merging, `W' = W + (alpha / r) A B`, removes inference overhead but ties the weights to one adapter. For multi-tenant serving run the base matmul once for the whole batch, then for each adapter id gather the rows that asked for it and add `(x[rows] @ A_i) @ B_i * scale`. A per-request loop over the base matmul is the wrong answer. Merging into a quantised base rounds twice and is lossy.
+Cost: $d = k = 4096$, $r = 8$: $8 \times (4096 + 4096) = 65{,}536$ trainable values against $16{,}777{,}216$ frozen, 0.39%. Keep the two thin matmuls in the forward pass. Forming `A @ B` each time builds a full $d \times k$ matrix and discards the saving. Merging, $W' = W + \tfrac{\alpha}{r} A B$, removes inference overhead but ties the weights to one adapter. For multi-tenant serving run the base matmul once for the whole batch, then for each adapter id gather the rows that asked for it and add `(x[rows] @ A_i) @ B_i * scale`. A per-request loop over the base matmul is the wrong answer. Merging into a quantised base rounds twice and is lossy.
 
 ### Evaluation metrics
 
-**pass@k.** Sample `n` solutions, `c` pass. The probability that at least one of `k` drawn without replacement passes is `1 - C(n - c, k) / C(n, k)`. With `n = 10`, `c = 3`, `k = 5` that is `1 - 21/252 = 0.917`, while the naive `1 - (1 - 0.3)^5 = 0.832` underestimates. A numerically stable product form is `1 - prod over i from n - c + 1 to n of (1 - k / i)`. Return 1 when `n - c < k`.
+**pass@k.** Sample $n$ solutions, $c$ pass. The probability that at least one of $k$ drawn without replacement passes is $1 - \binom{n - c}{k} / \binom{n}{k}$. With $n = 10$, $c = 3$, $k = 5$ that is $1 - 21/252 = 0.917$, while the naive $1 - (1 - 0.3)^5 = 0.832$ underestimates. A numerically stable product form is $1 - \prod_{i = n - c + 1}^{n} (1 - k / i)$. Return 1 when $n - c \lt k$.
 
 **QA metrics.** Normalise first (lowercase, strip punctuation, drop the articles a, an, the, collapse spaces). Exact match compares normalised strings. Token F1 uses the multiset overlap: prediction "the cat sat" against "a cat sat down" normalises to `[cat, sat]` and `[cat, sat, down]`, overlap 2, precision 1, recall 2/3, F1 = 0.8. Define what both-empty and no-overlap return.
 
@@ -747,7 +770,7 @@ Cost: `d = k = 4096`, `r = 8`: `8 * (4096 + 4096) = 65,536` trainable values aga
 
 ### Check yourself
 
-1. Why must exactly one of `A` and `B` start at zero?
+1. Why must exactly one of $A$ and $B$ start at zero?
 
 <details><summary>Answer</summary>
 
@@ -755,11 +778,11 @@ Zero on one side makes the update exactly zero at step 0, so the model starts as
 
 </details>
 
-2. `n = 5`, `c = 4`, `k = 2`. What is pass@2?
+2. With $n = 5$, $c = 4$, $k = 2$, what is pass@2?
 
 <details><summary>Answer</summary>
 
-`n - c = 1 < k = 2`, so every pair contains at least one success: pass@2 = 1.0. Check: `1 - C(1,2)/C(5,2) = 1 - 0 = 1`.
+$n - c = 1 \lt k = 2$, so every pair contains at least one success: pass@2 = 1.0. Check: $1 - \binom{1}{2} / \binom{5}{2} = 1 - 0 = 1$.
 
 </details>
 
@@ -770,7 +793,7 @@ Zero on one side makes the update exactly zero at step 0, so the model starts as
 In a timed round the tests are your instruments. Use five kinds, from cheapest to strongest.
 
 1. **Hand oracles.** A value you computed on paper, such as softmax of `[2, 1, 0]` or the top-p example in Part 4.
-2. **Invariants.** Properties that hold for all inputs: probabilities sum to 1, softmax unchanged by adding a constant, `logsumexp(x + c) = logsumexp(x) + c`, causal outputs unchanged when the future changes, RMSNorm unchanged under scaling of the input (up to eps), cosine similarity unchanged under scaling, rows independent of other batch rows, retrieval returns the query document first.
+2. **Invariants.** Properties that hold for all inputs: probabilities sum to 1, softmax unchanged by adding a constant, $\operatorname{logsumexp}(x + c) = \operatorname{logsumexp}(x) + c$, causal outputs unchanged when the future changes, RMSNorm unchanged under scaling of the input (up to eps), cosine similarity unchanged under scaling, rows independent of other batch rows, retrieval returns the query document first.
 3. **Reference comparison.** A slow loop version, the same model without a cache, merged against unmerged LoRA, streamed against batch parsing. Test the fast path against the slow path on random inputs under a fixed seed.
 4. **Gradient checks.** Compare the analytic gradient with central differences, in float64:
 
@@ -786,7 +809,7 @@ def numeric_grad(f, x, eps=1e-6):
     return g   # relative error |a - n| / max(|a| + |n|, 1e-12) should be near 1e-7
 ```
 
-5. **Statistical tests** for samplers: fixed seed, many draws, tolerance of about 4 standard errors `sqrt(p (1 - p) / n)`.
+5. **Statistical tests** for samplers: fixed seed, many draws, tolerance of about 4 standard errors $\sqrt{p (1 - p) / n}$.
 
 For debugging, shrink the input, then bisect by comparing intermediate tensors against the reference. Run once under `np.errstate(all="raise")` to stop at the first `nan` or overflow. Print shapes at each step. Check extreme inputs (1000, -1000, `-inf`, zeros, ties, length-1 sequences). Do not assert exact float equality except where the operations are identical. Use `np.allclose` and know the tolerance.
 
@@ -804,7 +827,7 @@ Row independence: changing one batch element must not change another element's o
 
 <details><summary>Answer</summary>
 
-Central differences have error of order `eps^2` instead of `eps`, so they stay accurate at an `eps` large enough to avoid floating-point cancellation.
+Central differences have error of order $\epsilon^2$ instead of $\epsilon$, so they stay accurate at an $\epsilon$ large enough to avoid floating-point cancellation.
 
 </details>
 
@@ -885,7 +908,7 @@ Each rewrites values without changing array shapes, so only value-level checks (
 
 ## Putting it together
 
-A strong answer to a build-from-scratch prompt follows one arc. Clarify and write signatures with shapes (Part 1). Write tests with a hand oracle, an invariant and an edge case. Implement the simple loop version, then vectorise with explicit shape comments (Part 2). Name the stability trick, the complexity and the failure mode as you write: "mask before softmax", "O(T) per step with a cache, memory-bound", "rank-based fusion". Finish by checking the fast version against the slow one. For a composite prompt such as "stream an answer from a mini RAG with retries", the pieces are chunking and search (Part 6), a streaming parser and retry loop (Part 7), and an eval metric (Part 8). Name the seam between them, such as the idempotency key and the chunking-equivalence test, because that is where integration bugs live.
+A strong answer to a build-from-scratch prompt follows one arc. Clarify and write signatures with shapes (Part 1). Write tests with a hand oracle, an invariant and an edge case. Implement the simple loop version, then vectorise with explicit shape comments (Part 2). Name the stability trick, the complexity and the failure mode as you write: "mask before softmax", "each step costs $O(T)$ with a cache, memory-bound", "rank-based fusion". Finish by checking the fast version against the slow one. For a composite prompt such as "stream an answer from a mini RAG with retries", the pieces are chunking and search (Part 6), a streaming parser and retry loop (Part 7), and an eval metric (Part 8). Name the seam between them, such as the idempotency key and the chunking-equivalence test, because that is where integration bugs live.
 
 ## Exercises
 

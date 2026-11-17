@@ -129,10 +129,10 @@ Indirect channels are broader than "web pages". Anything a model reads counts: r
 
 ### Why a filter cannot close the gap
 
-Consider a classifier that detects injection with recall r on a fixed attack set. Three problems stop that from being a security control.
+Consider a classifier that detects injection with recall $r$ on a fixed attack set. Three problems stop that from being a security control.
 
 1. Adaptivity. Static attack sets measure yesterday's attacks. Published work on adaptive attacks against defences (attacker knows the defence and optimises against it) repeatedly drives reported success rates for prompt-level defences much higher than the originally reported numbers. A defence evaluated only against fixed strings has not been evaluated.
-2. Repetition. If one attempt succeeds with probability p and attackers can vary the payload cheaply, the chance of at least one success in n tries is 1 - (1 - p)^n. For p = 0.01: n = 10 gives 9.6%, n = 50 gives 39.5%, n = 100 gives 63.4%. A filter with 99% recall sounds strong and is a speed bump. The exercise `ex05_redteam_asr.py` has `asr_at_n` for this.
+2. Repetition. If one attempt succeeds with probability $p$ and attackers can vary the payload cheaply, the chance of at least one success in $n$ tries is $1 - (1 - p)^n$. For $p = 0.01$: $n = 10$ gives 9.6%, $n = 50$ gives 39.5%, $n = 100$ gives 63.4%. A filter with 99% recall sounds strong and is a speed bump. The exercise `ex05_redteam_asr.py` has `asr_at_n` for this.
 3. Semantic overlap. The same sentence can be a legitimate instruction (meeting notes saying "send the summary to Dana") or an attack. Telling them apart requires knowing who may give instructions, which is exactly what the single channel lacks.
 
 So raise the cost of attacks with training, filters and marking (probabilistic layers), and cap the damage with architecture (deterministic layers, Part 3). Only the second gives guarantees. Provider-side training such as an instruction hierarchy (system above user above tool content) measurably lowers attack success but does not reach zero, so treat it like memory-safe languages: a large cut in a bug class, not the end of it.
@@ -155,7 +155,7 @@ Parameterised queries work because the engine receives code and values on separa
 
 <details><summary>Answer</summary>
 
-Whether the test set was fixed or adaptive, how many distinct attack families it includes, what the false-positive rate on your traffic is, and whether the attacker is allowed to see the defence. Then compute the retry maths: at a 2% per-attempt miss rate, 100 attempts succeed about 87% of the time (1 - 0.98^100). The number is useful as one layer, not as a boundary.
+Whether the test set was fixed or adaptive, how many distinct attack families it includes, what the false-positive rate on your traffic is, and whether the attacker is allowed to see the defence. Then compute the retry maths: at a 2% per-attempt miss rate, 100 attempts succeed about 87% of the time ($1 - 0.98^{100} \approx 0.867$). The number is useful as one layer, not as a boundary.
 
 </details>
 
@@ -289,9 +289,12 @@ Other families (many-shot prompting, multi-turn escalation, optimised GCG suffix
 
 The headline metric is attack success rate (ASR): successes divided by attempts for a stated attack set and a stated success criterion. Three things make an ASR number honest.
 
-1. A stated judge with known error. A "success" is decided by a human or an LLM judge. Judges err, and the error shifts the number. If the judge has sensitivity 0.90 (flags 90% of true successes) and false-positive rate 0.05, an observed ASR of 0.20 corresponds to a true rate of (0.20 - 0.05) / (0.90 - 0.05) = 0.176. Calibrate the judge on a hand-labelled sample and report that.
-2. A confidence interval. With n attempts, the Wilson score interval is
-   `centre = (p + z^2/(2n)) / (1 + z^2/n)` and `half = z * sqrt(p(1-p)/n + z^2/(4n^2)) / (1 + z^2/n)`, with z = 1.96 for 95%.
+1. A stated judge with known error. A "success" is decided by a human or an LLM judge. Judges err, and the error shifts the number. If the judge has sensitivity 0.90 (flags 90% of true successes) and false-positive rate 0.05, an observed ASR of 0.20 corresponds to a true rate of $\tfrac{0.20 - 0.05}{0.90 - 0.05} = 0.176$. Calibrate the judge on a hand-labelled sample and report that.
+2. A confidence interval. With $n$ attempts and observed rate $p$, the Wilson score interval is
+
+   $$\text{centre} = \frac{p + \frac{z^2}{2n}}{1 + \frac{z^2}{n}}, \qquad \text{half} = \frac{z \sqrt{\frac{p(1-p)}{n} + \frac{z^2}{4n^2}}}{1 + \frac{z^2}{n}}$$
+
+   with $z = 1.96$ for 95%.
 3. Attempts per category, not pooled. A pooled ASR of 11/80 hides that one category sits at 45%.
 
 Worked numbers (95% Wilson):
@@ -302,13 +305,23 @@ Worked numbers (95% Wilson):
 | 9 / 20 | 45% | ~25.8% to ~65.8% |
 | 0 / 100 | 0% | 0% to ~3.7% |
 
-The same 5% observed rate has an interval of width ~9 points at n = 100 and ~2.7 points at n = 1,000. Twenty attempts per category, which is common in an informal red-team, cannot distinguish a 3% system from a 30% one.
+The same 5% observed rate has an interval of width ~9 points at $n = 100$ and ~2.7 points at $n = 1{,}000$. Twenty attempts per category, which is common in an informal red-team, cannot distinguish a 3% system from a 30% one.
 
 ### "We found nothing" needs an attempt count
 
-If 0 of n independent attempts succeeded, the one-sided upper bound on the true rate at confidence c is 1 - (1 - c)^(1/n). For n = 100 and c = 0.95 that is 2.95%, the exact version of the "rule of three" (about 3/n). To show an ASR below 1% at 95% confidence you need n >= ln(0.05) / ln(0.99), which rounds up to 299 attempts, with zero successes. For 0.1% you need ~3,000. If attacks are not independent (the same prompt re-run, or one clever idea reused), the effective n is smaller. This is why "we tried for a week and found nothing" is not a safety argument.
+If 0 of $n$ independent attempts succeeded, the one-sided upper bound on the true rate at confidence $c$ is $1 - (1 - c)^{1/n}$. For $n = 100$ and $c = 0.95$ that is 2.95%, the exact version of the "rule of three" (about $3/n$). To show an ASR below 1% at 95% confidence you need $n \geq \tfrac{\ln 0.05}{\ln 0.99} = 298.1$, which rounds up to 299 attempts, with zero successes. For 0.1% you need ~3,000. If attacks are not independent (the same prompt re-run, or one clever idea reused), the effective $n$ is smaller. This is why "we tried for a week and found nothing" is not a safety argument.
 
-Comparing two versions needs a test. For 9/20 versus 2/20 the pooled proportion is p = 11/40 = 0.275, se = sqrt(0.275 x 0.725 x (1/20 + 1/20)) = 0.1412, z = (0.45 - 0.10) / 0.1412 = 2.48, which exceeds 1.96. For 30/40 versus 28/40, z is about 0.5, so noise. The exercise `ex05_redteam_asr.py` computes all of this.
+Comparing two versions needs a test. For 9/20 versus 2/20, with pooled proportion $p$ and standard error $\text{se}$:
+
+```math
+\begin{aligned}
+p &= \tfrac{11}{40} = 0.275 \\
+\text{se} &= \sqrt{0.275 \times 0.725 \times \left(\tfrac{1}{20} + \tfrac{1}{20}\right)} = 0.1412 \\
+z &= \frac{0.45 - 0.10}{0.1412} = 2.48
+\end{aligned}
+```
+
+This $z$ exceeds 1.96. For 30/40 versus 28/40, $z$ is about 0.5, so noise. The exercise `ex05_redteam_asr.py` computes all of this.
 
 ### Methodology
 
@@ -327,7 +340,7 @@ For agents, test injection through every channel in the threat model and measure
 
 <details><summary>Answer</summary>
 
-The true rate is below roughly 1 - 0.05^(1/50) = 5.8% (Wilson gives ~7.1%), assuming independent attempts. You cannot claim below 1%, which needs ~299 attempts with zero successes.
+The true rate is below roughly $1 - 0.05^{1/50} = 0.058$, or 5.8% (Wilson gives ~7.1%), assuming independent attempts. You cannot claim below 1%, which needs ~299 attempts with zero successes.
 
 </details>
 
@@ -335,7 +348,11 @@ The true rate is below roughly 1 - 0.05^(1/50) = 5.8% (Wilson gives ~7.1%), assu
 
 <details><summary>Answer</summary>
 
-Observed = 30 / 200 = 0.15. Corrected = (0.15 - 0.04) / (0.85 - 0.04) = 0.11 / 0.81 = ~0.136. Report the correction and the uncertainty in sensitivity and false-positive rate too.
+$$\text{observed} = \frac{30}{200} = 0.15$$
+
+$$\text{corrected} = \frac{0.15 - 0.04}{0.85 - 0.04} = \frac{0.11}{0.81} \approx 0.136$$
+
+Report the correction and the uncertainty in sensitivity and false-positive rate too.
 
 </details>
 
@@ -351,7 +368,7 @@ Automation is cheap, repeatable and broad, so it covers known probe families and
 
 <details><summary>Answer</summary>
 
-Attackers retry and many attackers exist. At 0.1% per attempt, 1,000 attempts give 1 - 0.999^1000 = ~63% chance of at least one success. If a single success has high impact, the system needs a bounded blast radius, not just a low rate.
+Attackers retry and many attackers exist. At 0.1% per attempt, 1,000 attempts give $1 - 0.999^{1000} \approx 0.63$, a ~63% chance of at least one success. If a single success has high impact, the system needs a bounded blast radius, not just a low rate.
 
 </details>
 
@@ -374,7 +391,7 @@ Sensitive data leaves through more paths than the model's answer.
 
 Detection has three mechanisms with different error profiles.
 
-Pattern matching with validation. A regex finds candidates for structured identifiers (emails, phone numbers, card numbers, national IDs), and a checksum or rule rejects most false positives. The Luhn checksum for payment cards works as follows: from the rightmost digit, double every second digit, subtract 9 from any doubled value above 9, sum everything, and the total must be divisible by 10. For 4111111111111111 (16 digits), the leftmost 4 sits at an odd position from the right and doubles to 8, the seven 1s at the other odd positions double to 2 each (14), and the eight 1s at even positions stay 1 each (8). Total = 8 + 14 + 8 = 30, which is divisible by 10, so it is valid. Changing the last digit to 2 gives 31, invalid. A random digit string passes Luhn with probability 1 in 10, so the checksum removes about 90% of false card matches, and a length check (13-19 digits) removes more.
+Pattern matching with validation. A regex finds candidates for structured identifiers (emails, phone numbers, card numbers, national IDs), and a checksum or rule rejects most false positives. The Luhn checksum for payment cards works as follows: from the rightmost digit, double every second digit, subtract 9 from any doubled value above 9, sum everything, and the total must be divisible by 10. For 4111111111111111 (16 digits), counting the rightmost digit as position 1, the leftmost 4 sits at an even position (16) and doubles to 8, the seven 1s at the other even positions double to 2 each (14), and the eight 1s at odd positions stay 1 each (8). Total $= 8 + 14 + 8 = 30$, which is divisible by 10, so it is valid. Changing the last digit to 2 gives 31, invalid. A random digit string passes Luhn with probability 1 in 10, so the checksum removes about 90% of false card matches, and a length check (13-19 digits) removes more.
 
 Overlap and priority matter in practice: a card number contains substrings that look like phone numbers, so a detector must merge same-label overlaps and let the higher-priority label win across labels. Exercise `ex01_pii_redactor.py` builds this with span resolution.
 
@@ -388,16 +405,22 @@ Language models memorise some training sequences verbatim. Memorisation grows wi
 
 Two simple audits that you can run on your own models:
 
-1. Exact n-gram overlap. Build an index of all n-grams in the training text. For sampled outputs, compute the fraction of output n-grams found in the index. A long verbatim span is memorisation evidence. Limits: one changed token breaks every n-gram that spans it, and short n flags common phrases. For a nine-token source sentence and an output with one word swapped, 7 trigrams give 4 surviving (57%), 8 bigrams give 6 (75%), and 5 five-grams give 1 (20%). Choosing n trades sensitivity to edits against false flags. Exercise `ex07_memorisation_check.py` implements this.
-2. Membership inference. Given a candidate text, decide whether it was in the training set, using a signal such as per-token loss: members tend to have lower loss. Summarise attack strength by AUC, the probability that a random member scores a lower loss than a random non-member (ties count 0.5). With members' losses [1, 2, 3] and non-members' [2, 3, 4], 7 of 9 pairs favour the attack, AUC = 0.78. AUC of 0.5 means the attack learns nothing, and the healthy outcome is close to 0.5.
+1. Exact n-gram overlap. Build an index of all n-grams in the training text. For sampled outputs, compute the fraction of output n-grams found in the index. A long verbatim span is memorisation evidence. Limits: one changed token breaks every n-gram that spans it, and short $n$ flags common phrases. For a nine-token source sentence and an output with one word swapped, 7 trigrams give 4 surviving (57%), 8 bigrams give 6 (75%), and 5 five-grams give 1 (20%). Choosing $n$ trades sensitivity to edits against false flags. Exercise `ex07_memorisation_check.py` implements this.
+2. Membership inference. Given a candidate text, decide whether it was in the training set, using a signal such as per-token loss: members tend to have lower loss. Summarise attack strength by AUC, the probability that a random member scores a lower loss than a random non-member (ties count 0.5). With members' losses [1, 2, 3] and non-members' [2, 3, 4], 7 of 9 pairs favour the attack, $\text{AUC} = 7/9 = 0.78$. AUC of 0.5 means the attack learns nothing, and the healthy outcome is close to 0.5.
 
 ### Differential privacy in one section
 
-Differential privacy (DP) bounds how much any one person's record can change a released result. A randomised mechanism M is (epsilon, delta)-DP if for any two datasets differing in one record and any output set S, P(M(D) in S) <= e^epsilon x P(M(D') in S) + delta. Smaller epsilon means stronger privacy.
+Differential privacy (DP) bounds how much any one person's record can change a released result. A randomised mechanism $M$ is $(\varepsilon, \delta)$-DP if for any two datasets $D$ and $D'$ differing in one record and any output set $S$:
 
-Worked example 1, the Laplace mechanism. A count query changes by at most 1 when one person is added or removed (sensitivity 1). Adding Laplace noise with scale b = sensitivity / epsilon gives epsilon-DP. At epsilon = 0.5, b = 2, and the noise has standard deviation sqrt(2) x b = 2.83. A count of 1,000 is reported as roughly 1,000 plus or minus 3, which is fine for statistics and useless for a count of 5.
+```math
+P\big(M(D) \in S\big) \le e^{\varepsilon} \cdot P\big(M(D') \in S\big) + \delta
+```
 
-For model training, DP-SGD (Abadi et al.) clips each example's gradient to a norm bound C and adds Gaussian noise scaled to C before the update, and an accountant tracks the cumulative epsilon across steps. Costs: lower accuracy (more at small epsilon and on small datasets), slower training, and hyperparameters that interact. What you get is a provable bound on what any one training record can contribute, which is the only formal defence against membership inference and extraction. In practice, most teams rely on deduplication, scrubbing and access control, and use DP for specific high-sensitivity fine-tunes.
+Smaller $\varepsilon$ means stronger privacy.
+
+Worked example 1, the Laplace mechanism. A count query changes by at most 1 when one person is added or removed (sensitivity 1). Adding Laplace noise with scale $b = \text{sensitivity} / \varepsilon$ gives $\varepsilon$-DP. At $\varepsilon = 0.5$, $b = 2$, and the noise has standard deviation $\sqrt{2} \times b = 2.83$. A count of 1,000 is reported as roughly 1,000 plus or minus 3, which is fine for statistics and useless for a count of 5.
+
+For model training, DP-SGD (Abadi et al.) clips each example's gradient to a norm bound $C$ and adds Gaussian noise scaled to $C$ before the update, and an accountant tracks the cumulative $\varepsilon$ across steps. Costs: lower accuracy (more at small $\varepsilon$ and on small datasets), slower training, and hyperparameters that interact. What you get is a provable bound on what any one training record can contribute, which is the only formal defence against membership inference and extraction. In practice, most teams rely on deduplication, scrubbing and access control, and use DP for specific high-sensitivity fine-tunes.
 
 ### System prompt leakage
 
@@ -420,11 +443,11 @@ Luhn requires the weighted digit sum to be divisible by 10. For a random digit s
 
 </details>
 
-2. A count query has sensitivity 1 and you want epsilon = 0.1. What Laplace scale do you use, and what does it imply for small counts?
+2. A count query has sensitivity 1 and you want $\varepsilon = 0.1$. What Laplace scale do you use, and what does it imply for small counts?
 
 <details><summary>Answer</summary>
 
-Scale b = 1 / 0.1 = 10, with a standard deviation of ~14. A count of 8 would be swamped by noise of order 14, so small cells need suppression or aggregation. DP suits large-population statistics.
+Scale $b = 1 / 0.1 = 10$, with a standard deviation of $\sqrt{2} \times 10 \approx 14$. A count of 8 would be swamped by noise of order 14, so small cells need suppression or aggregation. DP suits large-population statistics.
 
 </details>
 
@@ -459,13 +482,13 @@ flowchart TD
 
 A classifier outputs a score and you choose a cut. Moving the cut trades false positives (benign requests blocked) against false negatives (harmful requests let through). Four counts define everything: TP, FP, TN, FN.
 
-```
-precision = TP / (TP + FP)       recall (TPR) = TP / (TP + FN)       FPR = FP / (FP + TN)
+```math
+\text{precision} = \frac{\text{TP}}{\text{TP} + \text{FP}} \qquad \text{recall (TPR)} = \frac{\text{TP}}{\text{TP} + \text{FN}} \qquad \text{FPR} = \frac{\text{FP}}{\text{FP} + \text{TN}}
 ```
 
 Worked example on a small set. Scores for 8 requests, labels 1 = harmful: scores [0.9, 0.8, 0.7, 0.6, 0.4, 0.3, 0.2, 0.1] with labels [1, 1, 0, 1, 0, 1, 0, 0].
 
-| Threshold (block if score >= t) | TP | FP | TN | FN | Cost if c_fp = 1, c_fn = 5 | Cost if c_fp = 10, c_fn = 1 |
+| Threshold (block if $\text{score} \geq t$) | TP | FP | TN | FN | Cost if $c_{\text{fp}} = 1$, $c_{\text{fn}} = 5$ | Cost if $c_{\text{fp}} = 10$, $c_{\text{fn}} = 1$ |
 |---|---|---|---|---|---|---|
 | 0.9 | 1 | 0 | 4 | 3 | 15 | 3 |
 | 0.8 | 2 | 0 | 4 | 2 | 10 | 2 |
@@ -477,32 +500,46 @@ Worked example on a small set. Scores for 8 requests, labels 1 = harmful: scores
 
 When a missed harm costs 5 times a false alarm, the best cut is 0.3. When a false alarm costs 10 times a miss (a premium product where blocking a paying customer is expensive), the best cut is 0.8. The cut follows the costs, not 0.5.
 
-If the score is a calibrated probability p of harm, the Bayes rule gives the cut directly: block when p x c_fn > (1 - p) x c_fp, i.e. p >= c_fp / (c_fp + c_fn). With c_fp = 1, c_fn = 5 that is 1/6 = 0.167. With c_fp = 10, c_fn = 1 it is 10/11 = 0.91. Raw classifier scores are often not calibrated, so measure calibration on held-out data first, or choose the threshold empirically as above. Exercise `ex03_guardrail_threshold.py` implements the sweep and the Bayes cut.
+If the score is a calibrated probability $p$ of harm, the Bayes rule gives the cut directly: block when
+
+```math
+p \cdot c_{\text{fn}} > (1 - p) \cdot c_{\text{fp}}, \quad \text{i.e.} \quad p \geq \frac{c_{\text{fp}}}{c_{\text{fp}} + c_{\text{fn}}}
+```
+
+With $c_{\text{fp}} = 1$, $c_{\text{fn}} = 5$ that is $1/6 = 0.167$. With $c_{\text{fp}} = 10$, $c_{\text{fn}} = 1$ it is $10/11 = 0.91$. Raw classifier scores are often not calibrated, so measure calibration on held-out data first, or choose the threshold empirically as above. Exercise `ex03_guardrail_threshold.py` implements the sweep and the Bayes cut.
 
 ### The base-rate trap
 
 Real traffic is mostly benign. Suppose 1,000,000 requests a day, prevalence of harmful 0.1% (1,000 requests), and a classifier with TPR 95% and FPR 1%.
 
-```
-TP = 950      FN = 50
-FP = 0.01 x 999,000 = 9,990      TN = 989,010
-precision = 950 / (950 + 9,990) = 8.7%
+```math
+\begin{aligned}
+\text{TP} &= 950 & \text{FN} &= 50 \\
+\text{FP} &= 0.01 \times 999{,}000 = 9{,}990 & \text{TN} &= 989{,}010 \\
+\text{precision} &= \frac{950}{950 + 9{,}990} = 8.7\%
+\end{aligned}
 ```
 
-About 91 of every 100 blocks are wrong, which is ~10,000 benign users blocked daily. Cut FPR to 0.1% and precision rises to 950 / (950 + 999) = 48.7%. The lesson: precision depends on FPR relative to prevalence, so "99% accurate" means nothing. Set the threshold from a stated FPR budget ("no more than 0.1% of benign traffic blocked"), which is the operating requirement that `threshold_for_fpr` implements: sort the benign scores and take the smallest threshold whose benign FPR is within budget.
+About 91 of every 100 blocks are wrong, which is ~10,000 benign users blocked daily. Cut FPR to 0.1% and precision rises to $\tfrac{950}{950 + 999} = 0.487$, or 48.7%. The lesson: precision depends on FPR relative to prevalence, so "99% accurate" means nothing. Set the threshold from a stated FPR budget ("no more than 0.1% of benign traffic blocked"), which is the operating requirement that `threshold_for_fpr` implements: sort the benign scores and take the smallest threshold whose benign FPR is within budget.
 
 ### Cascades
 
-Run a cheap, high-recall first stage and send only flagged items to a slower, more precise second stage. With the same traffic, stage 1 at TPR 98% and FPR 1% flags 980 harmful and 9,990 benign. Stage 2 with TPR 95% and FPR 5% on the flagged set leaves TP = 931 and FP = 499.5. Precision rises from 8.7% to 931 / (931 + 499.5) = 65.1% and overall recall is 0.98 x 0.95 = 93.1%. Stage 2 runs on about 1.1% of traffic, so a slow judge costs little in aggregate. The assumption is that the stages' errors are not strongly correlated, so check on real data.
+Run a cheap, high-recall first stage and send only flagged items to a slower, more precise second stage. With the same traffic, stage 1 at TPR 98% and FPR 1% flags 980 harmful and 9,990 benign. Stage 2 with TPR 95% and FPR 5% on the flagged set leaves $\text{TP} = 931$ and $\text{FP} = 499.5$. Precision rises from 8.7% to 65.1% and overall recall is 93.1%:
+
+```math
+\text{precision} = \frac{931}{931 + 499.5} = 65.1\%, \qquad \text{recall} = 0.98 \times 0.95 = 93.1\%
+```
+
+Stage 2 runs on about 1.1% of traffic, so a slow judge costs little in aggregate. The assumption is that the stages' errors are not strongly correlated, so check on real data.
 
 ### Cost-weighted view of operating points
 
-Take 1,000,000 daily requests as above and costs c_fp = $0.50 (lost session, support contact) and c_fn = $50 (incident handling and harm).
+Take 1,000,000 daily requests as above and costs $c_{\text{fp}}$ = \$0.50 (lost session, support contact) and $c_{\text{fn}}$ = \$50 (incident handling and harm).
 
 | Operating point | TPR | FPR | FP/day | FN/day | Daily cost |
 |---|---|---|---|---|---|
-| A | 0.95 | 1% | 9,990 | 50 | $4,995 + $2,500 = $7,495 |
-| B | 0.85 | 0.1% | 999 | 150 | $499.5 + $7,500 = $7,999.5 |
+| A | 0.95 | 1% | 9,990 | 50 | \$4,995 + \$2,500 = \$7,495 |
+| B | 0.85 | 0.1% | 999 | 150 | \$499.5 + \$7,500 = \$7,999.5 |
 
 ### Latency
 
@@ -523,7 +560,11 @@ Decide in advance what happens when a classifier times out: fail closed for high
 
 <details><summary>Answer</summary>
 
-Per 10,000 requests: harmful 50, benign 9,950. TP = 45, FP = 0.02 x 9,950 = 199. Precision = 45 / (45 + 199) = 18.4%. At this prevalence most blocks are wrong even though the classifier looks strong.
+Per 10,000 requests: harmful 50, benign 9,950. $\text{TP} = 45$, $\text{FP} = 0.02 \times 9{,}950 = 199$.
+
+$$\text{precision} = \frac{45}{45 + 199} = 0.184$$
+
+That is 18.4%. At this prevalence most blocks are wrong even though the classifier looks strong.
 
 </details>
 
@@ -531,7 +572,9 @@ Per 10,000 requests: harmful 50, benign 9,950. TP = 45, FP = 0.02 x 9,950 = 199.
 
 <details><summary>Answer</summary>
 
-c_fp / (c_fp + c_fn) = 1 / 21 = 0.048. Block when the calibrated probability of harm is at least about 4.8%.
+$$\frac{c_{\text{fp}}}{c_{\text{fp}} + c_{\text{fn}}} = \frac{1}{21} = 0.048$$
+
+Block when the calibrated probability of harm is at least about 4.8%.
 
 </details>
 
@@ -557,9 +600,9 @@ Pretraining optimises next-token likelihood, which rewards a plausible continuat
 
 ### Abstention as a decision
 
-Suppose a wrong answer costs lambda times the value of a right one. Answering has expected value p x 1 - (1 - p) x lambda, which is positive when p > lambda / (1 + lambda).
+Suppose a wrong answer costs $\lambda$ times the value of a right one. Answering has expected value $p \cdot 1 - (1 - p) \cdot \lambda$, which is positive when $p \gt \tfrac{\lambda}{1 + \lambda}$.
 
-| Cost of a wrong answer (lambda) | Answer only if confidence is above |
+| Cost of a wrong answer ($\lambda$) | Answer only if confidence is above |
 |---|---|
 | 1 | 0.50 |
 | 3 | 0.75 |
@@ -591,7 +634,7 @@ Controls:
 
 <details><summary>Answer</summary>
 
-lambda = 4, so answer when p > 4 / 5 = 0.8. Below 80% confidence the expected value of answering is negative and abstaining is better.
+$\lambda = 4$, so answer when $p \gt 4/5 = 0.8$. Below 80% confidence the expected value of answering is negative and abstaining is better.
 
 </details>
 
@@ -622,8 +665,16 @@ Pretraining produces a model that can continue any text, including harmful text.
 ### RLHF in numbers
 
 1. Collect comparisons: for a prompt, humans (or a model, in RLAIF) pick the better of two responses.
-2. Train a reward model r(x, y) on those pairs with the Bradley-Terry model: P(y_w preferred over y_l) = sigmoid(r(y_w) - r(y_l)). If r(y_w) = 2.0 and r(y_l) = 0.5, the probability is sigmoid(1.5) = 0.818, and the training loss for this pair is -ln(0.818) = 0.201. If the reward model had scored them equal, the probability would be 0.5 and the loss ln 2 = 0.693.
-3. Optimise the policy to maximise reward with a penalty for drifting from the reference model: maximise E[r(x, y)] - beta x KL(pi || pi_ref). Without the KL term the policy exploits reward-model errors (reward hacking), producing outputs the reward model likes and humans do not.
+2. Train a reward model $r(x, y)$ on those pairs with the Bradley-Terry model:
+
+   $$P(y_w \text{ preferred over } y_l) = \operatorname{sigmoid}\big(r(y_w) - r(y_l)\big)$$
+
+   If $r(y_w) = 2.0$ and $r(y_l) = 0.5$, the probability is $\operatorname{sigmoid}(1.5) = 0.818$, and the training loss for this pair is $-\ln(0.818) = 0.201$. If the reward model had scored them equal, the probability would be 0.5 and the loss $\ln 2 = 0.693$.
+3. Optimise the policy to maximise reward with a penalty for drifting from the reference model:
+
+   $$\max_{\pi} \thickspace \mathbb{E}\big[r(x, y)\big] - \beta \cdot \mathrm{KL}\big(\pi \thinspace\Vert\thinspace \pi_{\text{ref}}\big)$$
+
+   Without the KL term the policy exploits reward-model errors (reward hacking), producing outputs the reward model likes and humans do not.
 
 ### Constitutional AI and RLAIF
 
@@ -654,7 +705,7 @@ Phrases to avoid in design reviews: "alignment via system prompt" and "the model
 
 <details><summary>Answer</summary>
 
-The model is indifferent: P = sigmoid(0) = 0.5, and the cross-entropy loss is ln 2 = 0.693. Training increases the margin on the preferred response until the probability approaches the labelled preference.
+The model is indifferent: $P = \operatorname{sigmoid}(0) = 0.5$, and the cross-entropy loss is $\ln 2 = 0.693$. Training increases the margin on the preferred response until the probability approaches the labelled preference.
 
 </details>
 
@@ -688,14 +739,14 @@ Let preds be the system's yes/no decision (for example "advance the candidate") 
 
 | Metric | Definition | Needs labels? | Asks |
 |---|---|---|---|
-| Selection rate | P(pred = 1 given group) | No | How often is each group selected? |
+| Selection rate | $P(\text{pred} = 1 \mid \text{group})$ | No | How often is each group selected? |
 | Demographic parity difference | max group rate - min group rate | No | Are outcomes equal across groups? |
 | Disparate impact ratio | min group rate / max group rate | No | How large is the relative gap? |
 | Equal opportunity | Equal TPR across groups | Yes | Are qualified people treated equally? |
 | Equalised odds | Equal TPR and equal FPR across groups | Yes | Are both error types equal? |
-| Calibration within groups | P(y = 1 given score, group) same across groups | Yes | Does a score mean the same thing for each group? |
+| Calibration within groups | $P(y = 1 \mid \text{score}, \text{group})$ same across groups | Yes | Does a score mean the same thing for each group? |
 
-Worked example, selection rates. Group A: 100 applicants, 60 selected (0.60). Group B: 100 applicants, 42 selected (0.42). Demographic parity difference = 0.18. Disparate impact ratio = 0.42 / 0.60 = 0.70. The four-fifths rule of thumb from US employment-selection guidelines flags a ratio below 0.8 as evidence worth investigating. 48 selected out of 100 would give exactly 0.80 and pass. It is a screening heuristic, not a legal test or a proof either way.
+Worked example, selection rates. Group A: 100 applicants, 60 selected (0.60). Group B: 100 applicants, 42 selected (0.42). Demographic parity difference $= 0.60 - 0.42 = 0.18$. Disparate impact ratio $= 0.42 / 0.60 = 0.70$. The four-fifths rule of thumb from US employment-selection guidelines flags a ratio below 0.8 as evidence worth investigating. 48 selected out of 100 would give exactly 0.80 and pass. It is a screening heuristic, not a legal test or a proof either way.
 
 Worked example, equalised odds. Each group has 50 truly qualified and 50 not qualified people.
 
@@ -704,7 +755,7 @@ Worked example, equalised odds. Each group has 50 truly qualified and 50 not qua
 | A | 40 | 10 | 5 | 45 | 0.80 | 0.10 | 0.45 |
 | B | 30 | 20 | 5 | 45 | 0.60 | 0.10 | 0.35 |
 
-FPR is equal at 0.10. TPR is 0.80 versus 0.60, a gap of 0.20, so equal opportunity fails even though false positives match: qualified people in group B are rejected twice as often as qualified people in group A (20 of 50 versus 10 of 50). Equalised odds gap = max(0.20, 0.00) = 0.20. The parity difference is 0.10, a different number for a different question. Exercise `ex04_fairness_metrics.py` computes these.
+FPR is equal at 0.10. TPR is 0.80 versus 0.60, a gap of 0.20, so equal opportunity fails even though false positives match: qualified people in group B are rejected twice as often as qualified people in group A (20 of 50 versus 10 of 50). Equalised odds gap $= \max(0.20, 0.00) = 0.20$. The parity difference is 0.10, a different number for a different question. Exercise `ex04_fairness_metrics.py` computes these.
 
 ### Why you cannot have everything
 
@@ -714,7 +765,13 @@ Suppose group A has a base rate of qualified people of 30% and group B has 10%. 
 
 When an LLM does the screening, you often have no labels and no access to the model's internals. Counterfactual (paired) testing needs neither. Build pairs of inputs identical except for a protected signal, such as a name or pronoun that implies a group, a graduation-year pattern, or a mention of a disability-related organisation. Run both through the system many times (decoding noise means one run per pair is not enough) and compare outcomes.
 
-Worked numbers. 200 pairs, run once each at temperature 0. The original wins in 30 pairs, the swapped version wins in 12, and 158 are ties. Only discordant pairs carry information. Under no bias the discordant pairs split evenly, so z = (30 - 12) / sqrt(30 + 12) = 18 / 6.48 = 2.78, which exceeds 1.96 and indicates a real asymmetry. The flip rate of 42/200 = 21% gives the magnitude.
+Worked numbers. 200 pairs, run once each at temperature 0. The original wins in 30 pairs, the swapped version wins in 12, and 158 are ties. Only discordant pairs carry information. Under no bias the discordant pairs split evenly, so
+
+```math
+z = \frac{30 - 12}{\sqrt{30 + 12}} = \frac{18}{6.48} = 2.78
+```
+
+which exceeds 1.96 and indicates a real asymmetry. The flip rate of 42/200 = 21% gives the magnitude.
 
 ### Mitigation and process
 
@@ -726,7 +783,7 @@ Measure before and after every change, with intervals. Options include rebalanci
 
 <details><summary>Answer</summary>
 
-Difference = 0.15. Ratio = 0.35 / 0.50 = 0.70, below 0.80, so it is flagged for investigation. Whether that is unjustified depends on the qualification rates and the job-relatedness of the criteria.
+Difference $= 0.50 - 0.35 = 0.15$. Ratio $= 0.35 / 0.50 = 0.70$, below 0.80, so it is flagged for investigation. Whether that is unjustified depends on the qualification rates and the job-relatedness of the criteria.
 
 </details>
 

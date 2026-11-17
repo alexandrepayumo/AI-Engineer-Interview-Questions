@@ -34,72 +34,76 @@ Suggested study order and time: Parts 1 to 3 (images, CLIP, VLM architecture) in
 
 ### The problem
 
-A transformer consumes a sequence of vectors. Text has a natural discrete sequence. An image is a 2-D grid of pixels with strong local structure and no natural "next". Feeding every pixel as a token is hopeless: a 224 x 224 image has 50,176 pixels, and self-attention cost grows with the square of the sequence length. The ViT answer is to cut the image into patches and treat each patch as one token.
+A transformer consumes a sequence of vectors. Text has a natural discrete sequence. An image is a 2-D grid of pixels with strong local structure and no natural "next". Feeding every pixel as a token is hopeless: a $224 \times 224$ image has 50,176 pixels, and self-attention cost grows with the square of the sequence length. The ViT answer is to cut the image into patches and treat each patch as one token.
 
 ### Patchify, embed, add position
 
-Take an image of height H and width W with 3 channels and a patch size p. The grid has (H / p) x (W / p) patches. Each patch is flattened to a vector of p x p x 3 numbers and multiplied by one learned matrix to get a d-dimensional embedding. A position embedding is added so the model knows where each patch came from, and the sequence goes through ordinary transformer layers.
+Take an image of height $H$ and width $W$ with 3 channels and a patch size $p$. The grid has $(H / p) \times (W / p)$ patches. Each patch is flattened to a vector of $p \times p \times 3$ numbers and multiplied by one learned matrix to get a $d$-dimensional embedding. A position embedding is added so the model knows where each patch came from, and the sequence goes through ordinary transformer layers.
 
-Worked example, the original ViT-B/16: a 224 x 224 image, p = 16. The grid is 14 x 14 = 196 patches. Each patch holds 16 x 16 x 3 = 768 numbers, and ViT-B has d = 768, so the embedding matrix is 768 x 768. Equivalent view: the patch embedding is a convolution with kernel p, stride p, and d output channels.
+Worked example, the original ViT-B/16: a $224 \times 224$ image, $p = 16$. The grid is $14 \times 14 = 196$ patches. Each patch holds $16 \times 16 \times 3 = 768$ numbers, and ViT-B has $d = 768$, so the embedding matrix is $768 \times 768$. Equivalent view: the patch embedding is a convolution with kernel $p$, stride $p$, and $d$ output channels.
 
-For CLIP ViT-L/14 at 336 px: p = 14, grid 24 x 24 = 576 patches, patch vector 14 x 14 x 3 = 588 numbers, d = 1024. These are the numbers behind the "576 image tokens" you see in LLaVA-1.5.
+For CLIP ViT-L/14 at 336 px: $p = 14$, grid $24 \times 24 = 576$ patches, patch vector $14 \times 14 \times 3 = 588$ numbers, $d = 1024$. These are the numbers behind the "576 image tokens" you see in LLaVA-1.5.
 
 The reshape trick: split each spatial axis into (blocks, within-block), move the two block axes next to each other, and flatten. Exercise 1 asks you to write this and its inverse.
 
 ### Why the sequence length is the whole story
 
-Per transformer layer, with N tokens and width d, the multiply-adds are roughly:
+Per transformer layer, with $N$ tokens and width $d$, the multiply-adds are roughly:
 
-```text
-projections + MLP:   12 * N * d^2     (4 N d^2 for Q, K, V, O and 8 N d^2 for a 4x MLP)
-attention scores:    2 * N^2 * d      (QK^T and then the weighted sum of V)
+```math
+\begin{aligned}
+\text{projections + MLP} &: 12 N d^2 && (4 N d^2 \text{ for } Q, K, V, O \text{ and } 8 N d^2 \text{ for a 4x MLP}) \\
+\text{attention scores} &: 2 N^2 d && (Q K^\top \text{ and then the weighted sum of } V)
+\end{aligned}
 ```
 
-The two terms are equal when N = 6d. For ViT-L (d = 1024) that is N = 6,144 tokens. At the 576 tokens of a 336 px image, attention is only 576 / (6144 + 576) = 8.6% of the layer compute, so cost is close to linear in tokens. At 4,096 tokens (a 896 x 896 image with 14 px patches is 64 x 64) attention is 4096 / (6144 + 4096) = 40%. So doubling the side length multiplies the token count by 4 and the encoder compute by a bit more than 4, and the attention matrix alone grows 16 times.
+The two terms are equal when $N = 6d$. For ViT-L ($d = 1024$) that is $N = 6{,}144$ tokens. At the 576 tokens of a 336 px image, attention is only $576 / (6144 + 576) = 0.086$, or 8.6%, of the layer compute, so cost is close to linear in tokens. At 4,096 tokens (a $896 \times 896$ image with 14 px patches is $64 \times 64$) attention is $4096 / (6144 + 4096) = 0.40$, or 40%. So doubling the side length multiplies the token count by 4 and the encoder compute by a bit more than 4, and the attention matrix alone grows 16 times.
 
-The LLM side has its own bill. Image tokens enter the LLM context, so they pay for prefill compute and for KV cache memory for the whole conversation. For a Llama-style 7B model (32 layers, 32 KV heads, head dimension 128, fp16), the KV cache costs 2 x 32 x 32 x 128 x 2 bytes = 524,288 bytes per token. One 576-token image therefore holds 576 x 524,288 = 302 MB of cache for as long as the conversation lives. With grouped-query attention (8 KV heads) it is 75 MB. This is a main reason providers charge for images as tokens and cap images per request.
+The LLM side has its own bill. Image tokens enter the LLM context, so they pay for prefill compute and for KV cache memory for the whole conversation. For a Llama-style 7B model (32 layers, 32 KV heads, head dimension 128, fp16), the KV cache costs $2 \times 32 \times 32 \times 128 \times 2 = 524{,}288$ bytes per token. One 576-token image therefore holds $576 \times 524{,}288 \text{ bytes} \approx 302 \text{ MB}$ of cache for as long as the conversation lives. With grouped-query attention (8 KV heads) it is 75 MB. This is a main reason providers charge for images as tokens and cap images per request.
 
 ### What providers do with the pixels
 
 Every provider turns an image into a token count that grows with area, but the formulas differ and change with model generations, so check current documentation before quoting a price. The README lists the current schemes. Three simplified models, all implemented in the exercise code:
 
-1. **Fixed 512 px tiles.** Scale so the longer side is at most 2,048, then so the shorter side is at most 768, then count 512 x 512 tiles. Tokens = 85 + 170 x tiles. A 1,024 x 1,024 image becomes 768 x 768, which is 2 x 2 = 4 tiles, so 85 + 680 = 765 tokens. A 2,048 x 4,096 image becomes 768 x 1,536, which is 2 x 3 = 6 tiles, so 1,105 tokens.
-2. **Per-patch with a cap.** Tokens = ceil(W / 28) x ceil(H / 28), and images over the cap are downscaled first. A 1,000 x 1,000 image is 36 x 36 = 1,296 tokens. A 1,568 x 1,568 image would be 56 x 56 = 3,136 tokens, so with a 1,568 cap it is shrunk until it fits.
+1. **Fixed 512 px tiles.** Scale so the longer side is at most 2,048, then so the shorter side is at most 768, then count $512 \times 512$ tiles. $\text{Tokens} = 85 + 170 \times \text{tiles}$. A $1{,}024 \times 1{,}024$ image becomes $768 \times 768$, which is $2 \times 2 = 4$ tiles, so $85 + 680 = 765$ tokens. A $2{,}048 \times 4{,}096$ image becomes $768 \times 1{,}536$, which is $2 \times 3 = 6$ tiles, so 1,105 tokens.
+2. **Per-patch with a cap.** $\text{Tokens} = \lceil W / 28 \rceil \times \lceil H / 28 \rceil$, and images over the cap are downscaled first. A $1{,}000 \times 1{,}000$ image is $36 \times 36 = 1{,}296$ tokens. A $1{,}568 \times 1{,}568$ image would be $56 \times 56 = 3{,}136$ tokens, so with a 1,568 cap it is shrunk until it fits.
 3. **Fixed budget tiers.** The caller picks a resolution setting and the model spends a fixed token count per image regardless of size.
 
-Same image, three bills. Take 1,344 x 896 (a typical wide photo):
+Same image, three bills. Take $1{,}344 \times 896$ (a typical wide photo):
 
-```text
-fixed 512 px tiles:  longer side ok, shorter 896 > 768 -> scale to 1152 x 768
-                     tiles = ceil(1152/512) x ceil(768/512) = 3 x 2 = 6
-                     tokens = 85 + 170 x 6 = 1,105
-per-patch (28 px):   48 x 32 = 1,536 tokens (fits a 1,568 cap)
-AnyRes, 336 tiles:   grid 3 x 2 + one global thumbnail = 7 views
-                     7 x 576 = 4,032 raw tokens, or 7 x 144 = 1,008 after 4x compression
+```math
+\begin{aligned}
+&\text{fixed 512 px tiles:} && \text{longer side ok, shorter } 896 > 768 \rightarrow \text{scale to } 1152 \times 768 \\
+& && \text{tiles} = \lceil 1152/512 \rceil \times \lceil 768/512 \rceil = 3 \times 2 = 6 \\
+& && \text{tokens} = 85 + 170 \times 6 = 1{,}105 \\
+&\text{per-patch (28 px):} && 48 \times 32 = 1{,}536 \text{ tokens (fits a 1,568 cap)} \\
+&\text{AnyRes, 336 tiles:} && \text{grid } 3 \times 2 + \text{one global thumbnail} = 7 \text{ views} \\
+& && 7 \times 576 = 4{,}032 \text{ raw tokens, or } 7 \times 144 = 1{,}008 \text{ after 4x compression}
+\end{aligned}
 ```
 
 Three answers between roughly 1,000 and 4,000 for one image. Never quote "an image costs N tokens". Quote the formula for the model you are using and the resolution you will actually send.
 
 ### Dynamic tiling (AnyRes)
 
-A fixed-resolution encoder trained at 336 or 448 px sees a 4,000 x 1,000 banner as a squashed smear if you resize it to a square. Dynamic tiling fixes that without retraining the encoder:
+A fixed-resolution encoder trained at 336 or 448 px sees a $4{,}000 \times 1{,}000$ banner as a squashed smear if you resize it to a square. Dynamic tiling fixes that without retraining the encoder:
 
-1. Choose a grid (cols x rows) whose aspect ratio is closest to the image's, subject to a maximum number of tiles.
-2. Resize the image to (cols x tile) by (rows x tile) and cut it into tiles.
+1. Choose a grid (cols $\times$ rows) whose aspect ratio is closest to the image's, subject to a maximum number of tiles.
+2. Resize the image to $\text{cols} \times \text{tile}$ by $\text{rows} \times \text{tile}$ and cut it into tiles.
 3. Add one low-resolution global thumbnail so the model keeps the whole-image context.
 4. Encode every view independently and concatenate the tokens, usually with a row-break marker so the LLM can recover the layout.
 
-Worked example, tile = 336, at most 6 tiles. A 1,344 x 672 image has ratio 2:1. The grids with ratio 2 are 2 x 1 (2 tiles) and 4 x 2 (8 tiles, over the limit), so choose 2 x 1: 2 tiles + 1 thumbnail = 3 views. A 672 x 672 image has ratio 1. Both 1 x 1 and 2 x 2 match, and the rule "prefer the bigger grid when the image fills at least half of it" picks 2 x 2, since 451,584 is above 0.5 x 336^2 x 4 = 225,792. That is 4 tiles + 1 thumbnail = 5 views, 2,880 tokens at 576 per view. A 200 x 200 icon fails that test and uses 1 view: do not upsample to spend tokens on nothing.
+Worked example, $\text{tile} = 336$, at most 6 tiles. A $1{,}344 \times 672$ image has ratio 2:1. The grids with ratio 2 are $2 \times 1$ (2 tiles) and $4 \times 2$ (8 tiles, over the limit), so choose $2 \times 1$: 2 tiles + 1 thumbnail = 3 views. A $672 \times 672$ image has ratio 1. Both $1 \times 1$ and $2 \times 2$ match, and the rule "prefer the bigger grid when the image fills at least half of it" picks $2 \times 2$, since $672^2 = 451{,}584$ is above $0.5 \times 336^2 \times 4 = 225{,}792$. That is 4 tiles + 1 thumbnail = 5 views, $5 \times 576 = 2{,}880$ tokens at 576 per view. A $200 \times 200$ icon fails that test and uses 1 view: do not upsample to spend tokens on nothing.
 
-The cost control knob is tokens per view. A pixel-shuffle step merges each 2 x 2 neighbourhood of patch embeddings into one wider token, cutting 1,024 tokens to 256 (InternVL does this on 448 px tiles). Qwen2-VL merges 2 x 2 patches in its projector for the same reason. Compression trades fine detail (small text) for context.
+The cost control knob is tokens per view. A pixel-shuffle step merges each $2 \times 2$ neighbourhood of patch embeddings into one wider token, cutting 1,024 tokens to 256 (InternVL does this on 448 px tiles). Qwen2-VL merges $2 \times 2$ patches in its projector for the same reason. Compression trades fine detail (small text) for context.
 
 ### Check yourself
 
-1. A ViT with 14 px patches sees a 518 x 518 image. How many patches, and how does the attention pair count compare with 224 x 224?
+1. A ViT with 14 px patches sees a $518 \times 518$ image. How many patches, and how does the attention pair count compare with $224 \times 224$?
 
 <details><summary>Answer</summary>
 
-518 / 14 = 37, so 37 x 37 = 1,369 patches. A 224 x 224 image has 16 x 16 = 256 patches. Tokens grow 5.35 times and attention pairs (N squared) grow 28.6 times: 1,369^2 = 1,874,161 versus 65,536.
+$518 / 14 = 37$, so $37 \times 37 = 1{,}369$ patches. A $224 \times 224$ image has $16 \times 16 = 256$ patches. Tokens grow 5.35 times and attention pairs ($N^2$) grow 28.6 times: $1{,}369^2 = 1{,}874{,}161$ versus $256^2 = 65{,}536$.
 
 </details>
 
@@ -115,7 +119,13 @@ Tiles are encoded independently, so no tile sees the whole image. The thumbnail 
 
 <details><summary>Answer</summary>
 
-Per token: 2 (K and V) x 40 x 8 x 128 x 2 bytes = 163,840 bytes. For 1,024 tokens: 167,772,160 bytes, about 168 MB.
+Per token, where the leading 2 counts K and V:
+
+$$2 \times 40 \times 8 \times 128 \times 2 \text{ bytes} = 163{,}840 \text{ bytes}$$
+
+For 1,024 tokens:
+
+$$1{,}024 \times 163{,}840 = 167{,}772{,}160 \text{ bytes} \approx 168 \text{ MB}$$
 
 </details>
 
@@ -129,14 +139,14 @@ Before CLIP, vision models were trained to predict one of a fixed set of labels 
 
 ### The loss, step by step
 
-Two encoders, an image encoder f and a text encoder g, each ending in a linear map to a shared d-dimensional space. For a batch of N (image, caption) pairs:
+Two encoders, an image encoder $f$ and a text encoder $g$, each ending in a linear map to a shared $d$-dimensional space. For a batch of $N$ (image, caption) pairs:
 
-1. Embed and L2-normalise: u_i = f(image_i) / ||f(image_i)||, v_j = g(text_j) / ||g(text_j)||.
-2. Build the N x N similarity matrix S_ij = <u_i, v_j> / T, where T is a temperature.
-3. The correct match for row i is column i. Apply cross-entropy over each row (an image picks its caption among N) and over each column (a caption picks its image among N).
-4. Average the two: L = (CE_rows + CE_cols) / 2.
+1. Embed and L2-normalise: $u_i = f(\text{image} _i) / \lVert f(\text{image} _i) \rVert$, $v_j = g(\text{text} _j) / \lVert g(\text{text} _j) \rVert$.
+2. Build the $N \times N$ similarity matrix $S_{ij} = \langle u_i, v_j \rangle / T$, where $T$ is a temperature.
+3. The correct match for row $i$ is column $i$. Apply cross-entropy over each row (an image picks its caption among $N$) and over each column (a caption picks its image among $N$).
+4. Average the two: $L = (\mathrm{CE_{rows}} + \mathrm{CE_{cols}}) / 2$.
 
-This is InfoNCE with N - 1 in-batch negatives, applied in both directions. It is symmetric because retrieval runs in both directions: the row term trains image-to-text search, the column term trains text-to-image search, and using both gives every embedding in the batch a gradient from N - 1 competitors.
+This is InfoNCE with $N - 1$ in-batch negatives, applied in both directions. It is symmetric because retrieval runs in both directions: the row term trains image-to-text search, the column term trains text-to-image search, and using both gives every embedding in the batch a gradient from $N - 1$ competitors.
 
 ### A worked batch
 
@@ -149,27 +159,29 @@ img1    0.3   0.7   0.4
 img2    0.1   0.5   0.6
 ```
 
-With T = 0.1 the logits are 10 times larger (8, 2, 1 and so on). Per-row losses (image-to-text), each the negative log softmax of the diagonal entry:
+With $T = 0.1$ the logits are 10 times larger (8, 2, 1 and so on). Per-row losses (image-to-text), each the negative log softmax of the diagonal entry:
 
-```text
-row 0: logits (8, 2, 1)  -> p = 0.9966 -> loss 0.0034
-row 1: logits (3, 7, 4)  -> p = 0.9362 -> loss 0.0659
-row 2: logits (1, 5, 6)  -> p = 0.7273 -> loss 0.3182   (caption 1 at 0.5 is close to the true 0.6)
-mean image-to-text = 0.1292
+```math
+\begin{aligned}
+\text{row 0: logits } (8, 2, 1) &\rightarrow p = 0.9966 \rightarrow \text{loss } 0.0034 \\
+\text{row 1: logits } (3, 7, 4) &\rightarrow p = 0.9362 \rightarrow \text{loss } 0.0659 \\
+\text{row 2: logits } (1, 5, 6) &\rightarrow p = 0.7273 \rightarrow \text{loss } 0.3182 && \text{(caption 1 at 0.5 is close to the true 0.6)} \\
+\text{mean image-to-text} &= 0.1292
+\end{aligned}
 ```
 
-Per-column losses (text-to-image): 0.0076, 0.1328, 0.1328, mean 0.0911. The CLIP loss is (0.1292 + 0.0911) / 2 = 0.1101. Row 2 carries more than half of the image-to-text loss: the loss concentrates on hard negatives, which is the point of in-batch contrastive learning.
+Per-column losses (text-to-image): 0.0076, 0.1328, 0.1328, mean 0.0911. The CLIP loss is $(0.1292 + 0.0911) / 2 = 0.1101$. Row 2 carries more than half of the image-to-text loss: the loss concentrates on hard negatives, which is the point of in-batch contrastive learning.
 
 ### Temperature
 
 Temperature controls how peaked the softmax is.
 
-- High T (say 1.0): logits span a narrow range because cosine similarity is in [-1, 1]. The softmax stays flat, loss stays high, and the gradient does not distinguish hard from easy negatives.
-- Low T (0.01 to 0.05): small similarity differences become large logit differences. The loss focuses on the hardest negatives, and training can be unstable or overfit to false negatives (another caption that is also valid for the image).
+- High $T$ (say 1.0): logits span a narrow range because cosine similarity is in $[-1, 1]$. The softmax stays flat, loss stays high, and the gradient does not distinguish hard from easy negatives.
+- Low $T$ (0.01 to 0.05): small similarity differences become large logit differences. The loss focuses on the hardest negatives, and training can be unstable or overfit to false negatives (another caption that is also valid for the image).
 
-Reproduce it by hand with N = 4, positive similarity 0.9 and three negatives at 0.5. T = 1 gives p = 0.332 and loss 1.10. T = 0.1 gives p = 0.948 and loss 0.054. CLIP does not fix T. It learns it as a parameter (a log-scale scalar, initialised at 0.07 and clipped so the scale never exceeds 100, which means T never goes below 0.01), so the model sharpens itself as embeddings improve.
+Reproduce it by hand with $N = 4$, positive similarity 0.9 and three negatives at 0.5. $T = 1$ gives $p = 0.332$ and loss 1.10. $T = 0.1$ gives $p = 0.948$ and loss 0.054. CLIP does not fix $T$. It learns it as a parameter (a log-scale scalar, initialised at 0.07 and clipped so the scale never exceeds 100, which means $T$ never goes below 0.01), so the model sharpens itself as embeddings improve.
 
-Two consequences. Loss values are not comparable across temperatures. And the loss of an uninformative model is log N: with N = 32,768 pairs in a batch that is 10.4, so bigger batches give harder, more informative negatives, which is why CLIP-style training used batches of about 32k.
+Two consequences. Loss values are not comparable across temperatures. And the loss of an uninformative model is $\log N$: with $N = 32{,}768$ pairs in a batch that is $\ln 32{,}768 \approx 10.4$, so bigger batches give harder, more informative negatives, which is why CLIP-style training used batches of about 32k.
 
 ### Zero-shot classification as nearest-neighbour search
 
@@ -183,14 +195,13 @@ The classifier head is built from text at inference time. Two details matter. Pr
 
 ### SigLIP: replace the softmax with independent binary problems
 
-The softmax over a batch makes every pair depend on all others, which complicates multi-device training because every device needs the full N x N logit set. SigLIP treats each (i, j) pair as an independent binary classification:
+The softmax over a batch makes every pair depend on all others, which complicates multi-device training because every device needs the full $N \times N$ logit set. SigLIP treats each $(i, j)$ pair as an independent binary classification:
 
-```text
-loss = - (1/N) * sum over i, j of log sigmoid( z_ij * (t * <u_i, v_j> + b) )
-       with z_ij = +1 when i == j and -1 otherwise
+```math
+L = -\frac{1}{N} \sum_{i, j} \log \sigma\big( z_{ij} \, (t \langle u_i, v_j \rangle + b) \big), \qquad z_{ij} = \begin{cases} +1 & i = j \\ -1 & \text{otherwise} \end{cases}
 ```
 
-Here t is a learnable scale and b a learnable bias. The bias matters: there are N positives and N^2 - N negatives, so at initialisation the loss would be dominated by negatives. Starting with b = -10 (and t = 10) makes "no match" the default. A single aligned pair at that initialisation gives logit 0 and loss log 2 = 0.693, and a negative pair gives logit -10 and loss log(1 + e^-10) = 0.00005. The exercise implements both losses.
+Here $t$ is a learnable scale and $b$ a learnable bias. The bias matters: there are $N$ positives and $N^2 - N$ negatives, so at initialisation the loss would be dominated by negatives. Starting with $b = -10$ (and $t = 10$) makes "no match" the default. A single aligned pair at that initialisation gives logit 0 and loss $\log 2 = 0.693$, and a negative pair gives logit $-10$ and loss $\log(1 + e^{-10}) \approx 0.00005$. The exercise implements both losses.
 
 ### What contrastive models can and cannot do
 
@@ -202,11 +213,11 @@ Strengths: broad open-vocabulary recognition, cheap retrieval, robust features t
 - **No dense or localised features.** The global embedding was trained for image-level matching. Later variants add localisation and dense-feature objectives, which matters for VLMs that must read small text.
 ### Check yourself
 
-1. In a batch of N pairs, how many positive and negative pairs does the CLIP loss use, and what is the loss when the model is totally uninformative?
+1. In a batch of $N$ pairs, how many positive and negative pairs does the CLIP loss use, and what is the loss when the model is totally uninformative?
 
 <details><summary>Answer</summary>
 
-The matrix has N positives and N^2 - N negatives, so each row has one positive and N - 1 negatives. An uninformative model gives equal logits, each softmax is uniform, and the loss is log N.
+The matrix has $N$ positives and $N^2 - N$ negatives, so each row has one positive and $N - 1$ negatives. An uninformative model gives equal logits, each softmax is uniform, and the loss is $\log N$.
 
 </details>
 
@@ -214,7 +225,7 @@ The matrix has N positives and N^2 - N negatives, so each row has one positive a
 
 <details><summary>Answer</summary>
 
-Dividing cosine similarity by a small T stretches logit differences, so a negative only slightly less similar than the positive still gets a large softmax probability and a large gradient. At large T the logits are squeezed and the gradient is nearly uniform over negatives.
+Dividing cosine similarity by a small $T$ stretches logit differences, so a negative only slightly less similar than the positive still gets a large softmax probability and a large gradient. At large $T$ the logits are squeezed and the gradient is nearly uniform over negatives.
 
 </details>
 
@@ -222,7 +233,7 @@ Dividing cosine similarity by a small T stretches logit differences, so a negati
 
 <details><summary>Answer</summary>
 
-There are N^2 - N negative pairs and only N positives. With a zero bias the initial loss and gradient would be dominated by negatives, pushing every logit down and slowing early training. A bias near -10 starts the model with the correct prior, "most pairs do not match".
+There are $N^2 - N$ negative pairs and only $N$ positives. With a zero bias the initial loss and gradient would be dominated by negatives, pushing every logit down and slowing early training. A bias near -10 starts the model with the correct prior, "most pairs do not match".
 
 </details>
 
@@ -248,19 +259,21 @@ The model is trained with the ordinary next-token loss on the answer tokens only
 
 ### Projector options
 
-All of these map N encoder tokens of width d_v to M LLM-space tokens of width d_llm.
+All of these map $N$ encoder tokens of width $d_v$ to $M$ LLM-space tokens of width $d_{\text{llm}}$.
 
-**Linear or MLP (LLaVA).** Each patch embedding goes through a linear layer or a two-layer MLP independently. M = N, so nothing is compressed. For d_v = 1024 and d_llm = 4096, a two-layer MLP has 1024 x 4096 + 4096 + 4096 x 4096 + 4096 = 20,979,712 parameters, about 21M. Next to a 7B LLM and a 300M encoder that is tiny, which is why it can be trained in hours.
+**Linear or MLP (LLaVA).** Each patch embedding goes through a linear layer or a two-layer MLP independently. $M = N$, so nothing is compressed. For $d_v = 1024$ and $d_{\text{llm}} = 4096$, a two-layer MLP has $1024 \times 4096 + 4096 + 4096 \times 4096 + 4096 = 20{,}979{,}712$ parameters, about 21M. Next to a 7B LLM and a 300M encoder that is tiny, which is why it can be trained in hours.
 
 **Q-Former (BLIP-2) and Perceiver Resampler (Flamingo).** A fixed set of M learned query vectors cross-attends into the N patch embeddings:
 
-```text
-Q: (M, d) learned queries      K, V: (N, d) from patch embeddings
-output = softmax(Q K^T / sqrt(d)) V           -> (M, d), independent of N
-cost   = O(M * N * d), versus O(N^2 * d) for self-attention over all patches
+```math
+\begin{aligned}
+&Q \in \mathbb{R}^{M \times d} \text{ (learned queries)}, \qquad K, V \in \mathbb{R}^{N \times d} \text{ (from patch embeddings)} \\
+&\text{output} = \operatorname{softmax}\!\left(\frac{Q K^\top}{\sqrt{d}}\right) V \in \mathbb{R}^{M \times d}, \text{ independent of } N \\
+&\text{cost} = O(M N d), \text{ versus } O(N^2 d) \text{ for self-attention over all patches}
+\end{aligned}
 ```
 
-M is fixed (32 in BLIP-2, 64 in Flamingo's resampler). A 576-patch image shrinks to 32 tokens, an 18-fold cut in LLM context. The queries learn to extract what the language model needs, and varying input sizes and video frames map to a constant budget.
+$M$ is fixed (32 in BLIP-2, 64 in Flamingo's resampler). A 576-patch image shrinks to 32 tokens, an 18-fold cut in LLM context. The queries learn to extract what the language model needs, and varying input sizes and video frames map to a constant budget.
 
 The catch is information loss: 32 queries must carry everything the LLM could ask about. Tasks needing exact detail (OCR, counting, chart values) suffer. Several ablations have found that a simple MLP with all tokens (or with deterministic merging) matches or beats learned resamplers at the same training data, which is why the common recipe is MLP + tiling + light pooling. Resamplers survive where the token budget is hard (video, many images, small models).
 
@@ -268,15 +281,15 @@ The catch is information loss: 32 queries must carry everything the LLM could as
 
 There are two ways to let the LLM see image features.
 
-**Prefix tokens in the sequence (LLaVA-style).** Image embeddings are tokens in the LLM's input, and every layer's self-attention sees them. No LLM architecture change. The cost is M tokens in context and in the KV cache of every layer.
+**Prefix tokens in the sequence (LLaVA-style).** Image embeddings are tokens in the LLM's input, and every layer's self-attention sees them. No LLM architecture change. The cost is $M$ tokens in context and in the KV cache of every layer.
 
 **Cross-attention layers (Flamingo, and open models such as Llama 3.2 Vision).** New cross-attention layers are inserted every few LLM layers. Text hidden states are queries and image features are keys and values. The text sequence stays short and the original LLM weights can stay frozen, which preserves text ability exactly. A gated residual (a tanh gate initialised at zero) makes the new layers start as no-ops, so training begins from the original LLM's behaviour.
 
 | | Prefix tokens | Cross-attention layers |
 |---|---|---|
 | LLM change | none | new layers inserted |
-| Image cost in context | M tokens in every layer | M keys and values only in the cross-attention layers |
-| KV cache for the image | M x all layers | M x only the cross-attention layers (1/4 of layers if every 4th) |
+| Image cost in context | $M$ tokens in every layer | $M$ keys and values only in the cross-attention layers |
+| KV cache for the image | $M \times$ all layers | $M \times$ only the cross-attention layers (1/4 of layers if every 4th) |
 | Used in | LLaVA, Qwen-VL, InternVL | Flamingo, Llama 3.2 Vision |
 
 Prefix fusion won the open-source mainstream because it is simple, scales with data, and handles interleaved multi-image prompts without extra machinery.
@@ -285,7 +298,7 @@ Prefix fusion won the open-source mainstream because it is simple, scales with d
 
 The adapter approach starts from a text LLM and a vision encoder trained separately. A native (early-fusion) model trains one transformer from the start on interleaved text, images and often audio.
 
-- **Discrete image tokens.** A VQ tokenizer maps an image to codebook indices (Chameleon uses a codebook of 8,192 entries and about 1,024 tokens per 512 x 512 image). The LLM predicts them with the same softmax as text, so it can generate images too. Cost: quantisation loses fine detail.
+- **Discrete image tokens.** A VQ tokenizer maps an image to codebook indices (Chameleon uses a codebook of 8,192 entries and about 1,024 tokens per $512 \times 512$ image). The LLM predicts them with the same softmax as text, so it can generate images too. Cost: quantisation loses fine detail.
 - **Frontier omni models.** Their makers describe them as natively multimodal. Architecture details are not published, so say "described as" in an interview and do not invent specifics.
 
 The trade: deeper integration (understand and generate in one stream, tighter cross-modal reasoning) against a far higher training cost and less reuse of existing LLMs.
@@ -339,7 +352,7 @@ A photo has a few large objects. A document page has thousands of tiny glyphs wh
 
 ### How many tokens does a page cost?
 
-Take a US Letter page, 8.5 x 11 inches, and a per-patch scheme with 28 px patches (Part 1).
+Take a US Letter page, $8.5 \times 11$ inches, and a per-patch scheme with 28 px patches (Part 1).
 
 ```text
 DPI    pixels         tokens (ceil(W/28) x ceil(H/28))    height of 10 pt text
@@ -348,9 +361,9 @@ DPI    pixels         tokens (ceil(W/28) x ceil(H/28))    height of 10 pt text
 200    1700 x 2200    61 x 79  = 4,819                    ~28 px
 ```
 
-A 10 pt line is 10 / 72 inch tall, so at 100 DPI a full text line is only about 14 px tall. A patch 28 px wide covers roughly 4 to 5 characters horizontally and two text lines vertically. At that density the encoder must recognise characters from a few pixels each. At 200 DPI the same text is legible, but the page costs about 4,800 tokens. Compare with the text alone: a dense page of 600 words is roughly 800 text tokens. So an image of a page costs 1.5 to 6 times the tokens of its own text, and that gap is the economic argument for OCR text. It is also the reason for compression methods that reduce vision tokens per page, such as the "optical compression" approach in some document models.
+A 10 pt line is $\tfrac{10}{72}$ inch tall, so at 100 DPI a full text line is only about 14 px tall. A patch 28 px wide covers roughly 4 to 5 characters horizontally and two text lines vertically. At that density the encoder must recognise characters from a few pixels each. At 200 DPI the same text is legible, but the page costs about 4,800 tokens. Compare with the text alone: a dense page of 600 words is roughly 800 text tokens. So an image of a page costs 1.5 to 6 times the tokens of its own text, and that gap is the economic argument for OCR text. It is also the reason for compression methods that reduce vision tokens per page, such as the "optical compression" approach in some document models.
 
-For a 100-page file at 1,568 tokens per page, a typical per-image cap, the cost is 156,800 tokens per file. That calculation is exercise P2.
+For a 100-page file at 1,568 tokens per page, a typical per-image cap, the cost is $100 \times 1{,}568 = 156{,}800$ tokens per file. That calculation is exercise P2.
 
 ### The three architectures
 
@@ -368,15 +381,21 @@ Arithmetic identities catch most silent digit errors, because a hallucinated dig
 
 ### Metrics for document tasks
 
-Exact match is harsh for answers with formatting variation. DocVQA uses **ANLS** (average normalised Levenshtein similarity). For one question, compare the prediction with each accepted answer, compute the normalised edit distance NL = distance / max(len(pred), len(gt)), score s = 1 - NL when NL < 0.5, else 0, and take the best over accepted answers. Example: prediction "1,234.50" against ground truth "1234.50": distance 1 (the comma), max length 8, NL = 0.125, score 0.875. The 0.5 threshold stops partial credit for garbage. For extraction products, report **per-field accuracy** on your own documents, split by field type (amounts, dates, names, free text) and by document source, since a model that is 99% right on printed invoices may be 80% on phone photos.
+Exact match is harsh for answers with formatting variation. DocVQA uses **ANLS** (average normalised Levenshtein similarity). For one question, compare the prediction with each accepted answer, compute the normalised edit distance $\mathrm{NL}$ and the score $s$,
+
+```math
+\mathrm{NL} = \frac{\text{distance}(\text{pred}, \text{gt})}{\max(\lvert \text{pred} \rvert, \lvert \text{gt} \rvert)}, \qquad s = \begin{cases} 1 - \mathrm{NL} & \text{if } \mathrm{NL} < 0.5 \\ 0 & \text{otherwise} \end{cases}
+```
+
+and take the best over accepted answers. Example: prediction "1,234.50" against ground truth "1234.50": distance 1 (the comma), max length 8, $\mathrm{NL} = 1/8 = 0.125$, score $s = 0.875$. The 0.5 threshold stops partial credit for garbage. For extraction products, report **per-field accuracy** on your own documents, split by field type (amounts, dates, names, free text) and by document source, since a model that is 99% right on printed invoices may be 80% on phone photos.
 
 ### Check yourself
 
-1. A scanned 8.5 x 11 page at 150 DPI is sent to a per-patch scheme with 28 px patches. How many tokens?
+1. A scanned $8.5 \times 11$ page at 150 DPI is sent to a per-patch scheme with 28 px patches. How many tokens?
 
 <details><summary>Answer</summary>
 
-1,275 x 1,650 pixels. ceil(1275 / 28) = 46 and ceil(1650 / 28) = 59, so 46 x 59 = 2,714 tokens.
+$1{,}275 \times 1{,}650$ pixels. $\lceil 1275 / 28 \rceil = 46$ and $\lceil 1650 / 28 \rceil = 59$, so $46 \times 59 = 2{,}714$ tokens.
 
 </details>
 
@@ -414,8 +433,8 @@ README lists three levels of multimodal RAG. Here is how each works in detail an
 
 ColPali feeds a page image through a VLM backbone and projects each output patch embedding to a small dimension (128). A page becomes about 1,024 vectors. The query is text, encoded into one 128-dimensional vector per query token. Score a page with MaxSim, the ColBERT operator:
 
-```text
-score(q, page) = sum over query tokens i of  max over page patches j of  <q_i, p_j>
+```math
+\operatorname{score}(q, \text{page}) = \sum_{i \in \text{query tokens}} \; \max_{j \in \text{page patches}} \langle q_i, p_j \rangle
 ```
 
 ```python
@@ -439,11 +458,11 @@ A second page whose patches are all moderately similar to both tokens (0.5 every
 
 The costs, using the exercise numbers:
 
-- **Storage.** 1,024 vectors x 128 dimensions x 2 bytes (fp16) = 262,144 bytes per page. For 5,000 pages that is 1.31 GB, versus 10 MB for one 1,024-dimension vector per page, 128 times more. Quantisation (binary or int8) and pruning of background patches cut this by an order of magnitude with modest quality loss.
-- **Compute.** A 20-token query against 1,024 patches of width 128 is 20 x 1,024 x 128 = 2.6M multiply-adds per page. 5,000 pages is 13 GMAC, which is trivial on a GPU. A million pages is 2.6 TMAC per query, so use a first-stage candidate generator (a pooled single vector per page, or a text index) and apply MaxSim to the top few hundred.
+- **Storage.** $1{,}024 \text{ vectors} \times 128 \text{ dimensions} \times 2 \text{ bytes (fp16)} = 262{,}144$ bytes per page. For 5,000 pages that is 1.31 GB, versus 10 MB for one 1,024-dimension vector per page, 128 times more. Quantisation (binary or int8) and pruning of background patches cut this by an order of magnitude with modest quality loss.
+- **Compute.** A 20-token query against 1,024 patches of width 128 is $20 \times 1{,}024 \times 128 \approx 2.6 \text{M}$ multiply-adds per page. 5,000 pages is 13 GMAC, which is trivial on a GPU. A million pages is 2.6 TMAC per query, so use a first-stage candidate generator (a pooled single vector per page, or a text index) and apply MaxSim to the top few hundred.
 
 
-When to choose which: Level 2 for mixed corpora with mostly text and some figures and a need for cheap storage; Level 3 for visually rich, layout-heavy collections (slides, scientific papers with figures, forms) where parsing quality is the main source of error; a hybrid (text index for exact terms plus page-image retrieval for visual content, merged with rank fusion) for corpora where users search both ways. Evaluate retrieval separately from generation: recall at k on a labelled question set, because a good generator cannot fix a missed page.
+When to choose which: Level 2 for mixed corpora with mostly text and some figures and a need for cheap storage; Level 3 for visually rich, layout-heavy collections (slides, scientific papers with figures, forms) where parsing quality is the main source of error; a hybrid (text index for exact terms plus page-image retrieval for visual content, merged with rank fusion) for corpora where users search both ways. Evaluate retrieval separately from generation: recall at $k$ on a labelled question set, because a good generator cannot fix a missed page.
 
 ### Check yourself
 
@@ -459,7 +478,7 @@ Mean pooling averages all patches into one vector, mixing everything on the page
 
 <details><summary>Answer</summary>
 
-1,024 x 128 x 1 byte = 131,072 bytes per page, times 100,000 = 13.1 GB. fp16 would be 26.2 GB.
+$1{,}024 \times 128 \times 1 \text{ byte} = 131{,}072$ bytes per page, and $131{,}072 \times 100{,}000 \approx 13.1 \text{ GB}$. fp16 would be 26.2 GB.
 
 </details>
 
@@ -480,15 +499,15 @@ Page-image late interaction (Level 3) or storing the table as parsed rows in the
 Speech at 16 kHz is 16,000 numbers per second. A 30-second clip is 480,000 samples. A model could consume raw samples with strided convolutions (wav2vec 2.0 does), but the dominant representation for ASR is a **log-mel spectrogram**, built in four steps:
 
 1. **Frame.** Cut the signal into overlapping windows of 25 ms (400 samples) with a hop of 10 ms (160 samples). Within 25 ms speech is roughly stationary.
-2. **Window and transform.** Multiply each frame by a Hann window (to avoid edge artefacts) and take an FFT. The output has n_fft / 2 + 1 bins, spaced sr / n_fft apart: for n_fft = 400 that is 40 Hz. Take the squared magnitude to get power.
+2. **Window and transform.** Multiply each frame by a Hann window (to avoid edge artefacts) and take an FFT. The output has $n_{\text{fft}} / 2 + 1$ bins, spaced $\text{sr} / n_{\text{fft}}$ apart: for $n_{\text{fft}} = 400$ that is $16{,}000 / 400 = 40$ Hz. Take the squared magnitude to get power.
 3. **Mel filterbank.** Collapse the linear frequency bins into about 80 bands equally spaced on the mel scale, using overlapping triangular filters.
 4. **Log.** Take the logarithm of each band's energy.
 
-The mel scale approximates human pitch perception: mel = 2595 x log10(1 + f / 700). Some values: 1,000 Hz is 1,000 mel, 4,000 Hz is 2,146 mel, 8,000 Hz is 2,840 mel. The band from 0 to 1,000 Hz takes 35% of the whole mel range, while 4,000 to 8,000 Hz (half the bandwidth) takes only 24%. So the mel filterbank devotes resolution to low frequencies, where vowels and the first formants live, and uses a few wide filters for the noisy high end of consonants.
+The mel scale approximates human pitch perception: $\text{mel} = 2595 \log_{10}(1 + f / 700)$. Some values: 1,000 Hz is 1,000 mel, 4,000 Hz is 2,146 mel, 8,000 Hz is 2,840 mel. The band from 0 to 1,000 Hz takes 35% of the whole mel range, while 4,000 to 8,000 Hz (half the bandwidth) takes only 24%. So the mel filterbank devotes resolution to low frequencies, where vowels and the first formants live, and uses a few wide filters for the noisy high end of consonants.
 
-Why log: loudness perception is roughly logarithmic, the dynamic range of speech is huge, and a gain change (the speaker moves away from the microphone) becomes an additive shift rather than a multiplicative one. Doubling the amplitude multiplies power by 4 and adds log10(4) = 0.602 to every log-mel value in bands carrying energy. Exercise 3 verifies it.
+Why log: loudness perception is roughly logarithmic, the dynamic range of speech is huge, and a gain change (the speaker moves away from the microphone) becomes an additive shift rather than a multiplicative one. Doubling the amplitude multiplies power by 4 and adds $\log_{10} 4 = 0.602$ to every log-mel value in bands carrying energy. Exercise 3 verifies it.
 
-Resulting size: 30 s at 100 frames per second is 3,000 frames x 80 bands = 240,000 values, half of the raw 480,000 samples, now arranged as a 2-D image of time versus frequency. Whisper's encoder then applies two convolutions, the second with stride 2, so the transformer sees 1,500 positions for 30 seconds, one per 20 ms, 50 per second.
+Resulting size: 30 s at 100 frames per second is $3{,}000 \text{ frames} \times 80 \text{ bands} = 240{,}000$ values, half of the raw 480,000 samples, now arranged as a 2-D image of time versus frequency. Whisper's encoder then applies two convolutions, the second with stride 2, so the transformer sees 1,500 positions for 30 seconds, one per 20 ms, 50 per second.
 
 ### Whisper-style encoder-decoder ASR
 
@@ -541,17 +560,21 @@ That is 350 ms over an 800 ms target. Where to cut, in order of payoff:
 3. **Reduce time to first token.** Cache the system prompt and tool definitions, keep the prompt short for voice, use a smaller or faster model for the opening response. The LLM time depends on prompt length through prefill.
 4. **Colocate and keep connections warm.** Network and TLS setup should not be paid per turn. Use a persistent WebRTC or WebSocket stream.
 
-A realistic target after these steps: 100 + 50 + 200 + 100 + 150 + 100 = 700 ms.
+A realistic target after these steps: $100 + 50 + 200 + 100 + 150 + 100 = 700$ ms.
 
 **Interruptions (barge-in).** Keep VAD running while the agent speaks, with echo cancellation so the agent does not hear itself. On detected speech: stop playback immediately, cancel LLM and TTS generation, and truncate the stored conversation to what the user actually heard, using word timestamps from TTS. If you keep the full planned reply in history, the model will believe it said things the user never heard. Tune sensitivity: a cough or "mm-hm" should not stop the agent, so classify backchannels separately from real interruptions.
 
 ### Check yourself
 
-1. A 16 kHz signal, 25 ms window, 10 ms hop, 10 s long. How many frames and what is the FFT bin spacing at n_fft = 512?
+1. A 16 kHz signal, 25 ms window, 10 ms hop, 10 s long. How many frames and what is the FFT bin spacing at $n_{\text{fft}} = 512$?
 
 <details><summary>Answer</summary>
 
-Samples 160,000. Frame length 400, hop 160, so 1 + (160,000 - 400) / 160 = 998 frames (floor of 997.5 is 997, plus 1). Bin spacing 16,000 / 512 = 31.25 Hz.
+Samples 160,000. Frame length 400, hop 160, so
+
+$$1 + \left\lfloor \frac{160{,}000 - 400}{160} \right\rfloor = 1 + \lfloor 997.5 \rfloor = 998 \text{ frames}$$
+
+Bin spacing $16{,}000 / 512 = 31.25$ Hz.
 
 </details>
 
@@ -589,26 +612,31 @@ Modelling the joint distribution of millions of pixel values directly is hard. D
 
 ### The forward process and the noise schedule
 
-Choose small variances beta_1, ..., beta_T. One step is q(x_t | x_{t-1}) = Normal(sqrt(1 - beta_t) x_{t-1}, beta_t I). Define alpha_t = 1 - beta_t and abar_t = alpha_1 x ... x alpha_t. A sum of independent Gaussians is Gaussian, so t steps collapse into one jump:
+Choose small variances $\beta_1, \dots, \beta_T$. One step is $q(x_t \mid x_{t-1}) = \mathcal{N}(\sqrt{1 - \beta_t} \thinspace x_{t-1}, \beta_t I)$. Define $\alpha_t = 1 - \beta_t$ and $\bar\alpha_t = \alpha_1 \alpha_2 \cdots \alpha_t$. A sum of independent Gaussians is Gaussian, so t steps collapse into one jump:
 
-```text
-x_t = sqrt(abar_t) * x_0 + sqrt(1 - abar_t) * eps,    eps ~ Normal(0, I)
+```math
+x_t = \sqrt{\bar\alpha_t} \, x_0 + \sqrt{1 - \bar\alpha_t} \, \epsilon, \qquad \epsilon \sim \mathcal{N}(0, I)
 ```
 
-Training never simulates the chain: pick any t, draw eps, compute x_t. The coefficient sqrt(abar_t) is the signal that remains, sqrt(1 - abar_t) the noise, and abar_t / (1 - abar_t) the signal-to-noise ratio (SNR).
+Training never simulates the chain: pick any $t$, draw $\epsilon$, compute $x_t$. The coefficient $\sqrt{\bar\alpha_t}$ is the signal that remains, $\sqrt{1 - \bar\alpha_t}$ the noise, and $\bar\alpha_t / (1 - \bar\alpha_t)$ the signal-to-noise ratio (SNR).
 
-The original linear schedule runs beta from 1e-4 to 0.02 over T = 1000 steps:
+The original linear schedule runs $\beta$ from $10^{-4}$ to $0.02$ over $T = 1000$ steps:
 
-```text
-t       abar_t      SNR
-100     0.897       8.7
-250     0.524       1.10
-500     0.0786      0.085
-750     0.0034      0.0034
-1000    4.0e-5      ~0
+| $t$ | $\bar\alpha_t$ | SNR |
+|---|---|---|
+| 100 | 0.897 | 8.7 |
+| 250 | 0.524 | 1.10 |
+| 500 | 0.0786 | 0.085 |
+| 750 | 0.0034 | 0.0034 |
+| 1000 | $4.0 \times 10^{-5}$ | $\approx 0$ |
+
+By $t = 500$ only 8% of the signal remains, and the last 250 steps work on nearly pure noise, which wastes network evaluations. The **cosine schedule**,
+
+```math
+\bar\alpha_t = \frac{f(t)}{f(0)}, \qquad f(t) = \cos^2\!\left(\frac{t / T + s}{1 + s} \cdot \frac{\pi}{2}\right), \qquad s = 0.008,
 ```
 
-By t = 500 only 8% of the signal remains, and the last 250 steps work on nearly pure noise, which wastes network evaluations. The **cosine schedule**, abar_t = f(t) / f(0) with f(t) = cos^2(((t / T + s) / (1 + s)) x pi / 2) and s = 0.008, keeps abar at 0.847 at t = 250 and 0.494 at t = 500. Exercise 5 computes both.
+keeps $\bar\alpha_t$ at 0.847 at $t = 250$ and 0.494 at $t = 500$. Exercise 5 computes both.
 
 ### What the network predicts
 
@@ -622,20 +650,20 @@ loss = np.mean((eps_theta(x_t, t) - eps) ** 2)   # plain MSE
 
 Three equivalent targets trade stability across noise levels:
 
-- **eps-prediction:** x0 = (x_t - sqrt(1 - abar) eps) / sqrt(abar). Errors at high noise (abar near 0) are amplified by 1 / sqrt(abar).
-- **v-prediction:** v = sqrt(abar) eps - sqrt(1 - abar) x0. Well behaved at every noise level, used by many modern and distilled models, and it supports a schedule that ends at exactly zero SNR so training matches sampling.
+- **eps-prediction:** $x_0 = (x_t - \sqrt{1 - \bar\alpha} \thinspace \epsilon) / \sqrt{\bar\alpha}$. Errors at high noise ($\bar\alpha$ near 0) are amplified by $1 / \sqrt{\bar\alpha}$.
+- **v-prediction:** $v = \sqrt{\bar\alpha} \thinspace \epsilon - \sqrt{1 - \bar\alpha} \thinspace x_0$. Well behaved at every noise level, used by many modern and distilled models, and it supports a schedule that ends at exactly zero SNR so training matches sampling.
 
 
 
 ### A closed-form denoiser you can run
 
-For data x0 ~ Normal(m, s0^2) the optimal predictor is exact. Marginally x_t is Normal(sqrt(abar) m, abar s0^2 + 1 - abar), and
+For data $x_0 \sim \mathcal{N}(m, \sigma_0^2)$ the optimal predictor is exact. Marginally $x_t$ is $\mathcal{N}(\sqrt{\bar\alpha} \thinspace m, \bar\alpha \sigma_0^2 + 1 - \bar\alpha)$, and
 
-```text
-E[eps | x_t] = sqrt(1 - abar) * (x_t - sqrt(abar) * m) / (abar * s0^2 + 1 - abar)
+```math
+\mathbb{E}[\epsilon \mid x_t] = \frac{\sqrt{1 - \bar\alpha} \, (x_t - \sqrt{\bar\alpha} \, m)}{\bar\alpha \sigma_0^2 + 1 - \bar\alpha}
 ```
 
-At abar near 0 this is x_t itself (all noise). A real network learns such a function for distributions with no closed form. Plugging this predictor into the DDIM sampler below with m = 3 and s0 = 0.5, from standard normal noise, gives mean 2.99 and standard deviation 0.47 at 50 steps, 0.33 at 8 steps, 0.49 at 200 steps and 0.50 at 1,000 steps (20,000 samples, seed 0). The mean is right at every step count. The spread shrinks when the sampler takes too few steps, which in images means lost diversity and detail.
+At $\bar\alpha$ near 0 this is $x_t$ itself (all noise). A real network learns such a function for distributions with no closed form. Plugging this predictor into the DDIM sampler below with $m = 3$ and $\sigma_0 = 0.5$, from standard normal noise, gives mean 2.99 and standard deviation 0.47 at 50 steps, 0.33 at 8 steps, 0.49 at 200 steps and 0.50 at 1,000 steps (20,000 samples, seed 0). The mean is right at every step count. The spread shrinks when the sampler takes too few steps, which in images means lost diversity and detail.
 
 ### Sampling: DDPM and DDIM
 
@@ -651,17 +679,17 @@ Pick any decreasing timestep sequence, for example 50 of 1,000. Same noise in, s
 
 ### Latent diffusion
 
-A 512 x 512 x 3 image is 786,432 values per step. **Latent diffusion** trains a VAE that maps it to a latent 8 times smaller per side, 64 x 64 x 4 = 16,384 values, 48 times fewer. Diffusion runs in latent space and the VAE decoder runs once at the end. The denoiser has moved from a U-Net to a transformer (**DiT**) over latent patches as in Part 1: a 64 x 64 latent with patch size 2 gives 1,024 tokens. A 1,024 x 1,024 image with a 16-channel latent is 128 x 128 x 16, about 4,096 tokens, so attention cost matters again.
+A $512 \times 512 \times 3$ image is 786,432 values per step. **Latent diffusion** trains a VAE that maps it to a latent 8 times smaller per side, $64 \times 64 \times 4 = 16{,}384$ values, 48 times fewer. Diffusion runs in latent space and the VAE decoder runs once at the end. The denoiser has moved from a U-Net to a transformer (**DiT**) over latent patches as in Part 1: a $64 \times 64$ latent with patch size 2 gives 1,024 tokens. A $1{,}024 \times 1{,}024$ image with a 16-channel latent is $128 \times 128 \times 16$, about 4,096 tokens, so attention cost matters again.
 
 ### Classifier-free guidance
 
-Condition the denoiser on a text embedding c, and replace c with an empty embedding for about 10 to 20% of training examples, so one network learns both eps(x_t, c) and eps(x_t). At sampling, run both and extrapolate:
+Condition the denoiser on a text embedding $c$, and replace $c$ with an empty embedding for about 10 to 20% of training examples, so one network learns both $\epsilon_\theta(x_t, c)$ and $\epsilon_\theta(x_t)$. At sampling, run both and extrapolate:
 
-```text
-eps_guided = eps_uncond + s * (eps_cond - eps_uncond)
+```math
+\epsilon_{\text{guided}} = \epsilon_{\text{uncond}} + s \, (\epsilon_{\text{cond}} - \epsilon_{\text{uncond}})
 ```
 
-By Bayes, grad log p(c | x) = grad log p(x | c) - grad log p(x), so this is the conditional score plus (s - 1) times an implicit classifier gradient. Scale 1 is plain conditional sampling, 0 is unconditional, above 1 sharpens toward the prompt. Numbers from the exercise 5 toy, with unconditional Normal(0, 1), conditional Normal(2, 0.3^2) and 50 DDIM steps:
+By Bayes, $\nabla_x \log p(c \mid x) = \nabla_x \log p(x \mid c) - \nabla_x \log p(x)$, so this is the conditional score plus $(s - 1)$ times an implicit classifier gradient. Scale 1 is plain conditional sampling, 0 is unconditional, above 1 sharpens toward the prompt. Numbers from the exercise 5 toy, with unconditional $\mathcal{N}(0, 1)$, conditional $\mathcal{N}(2, 0.3^2)$ and 50 DDIM steps:
 
 ```text
 scale 0:  mean 0.00, std 0.96     (unconditional)
@@ -687,19 +715,19 @@ flowchart TD
 
 Flow matching uses the simplest path, a straight line between a data point and a noise sample:
 
-```text
-x_t = (1 - t) * x_0 + t * eps,     velocity target v = eps - x_0
+```math
+x_t = (1 - t) \, x_0 + t \, \epsilon, \qquad \text{velocity target } v = \epsilon - x_0
 ```
 
-The network predicts v from (x_t, t), and sampling integrates dx/dt = v from t = 1 (noise) to t = 0, for example with Euler steps. Worked example: x0 = 2, eps = -1, so v = -3. At t = 0.5, x = 0.5. One Euler step from t = 1 (x = -1) to t = 0 gives -1 - 1 x (-3) = 2, exactly x0. For a single pair the path is straight and one step is exact. At inference the network does not know which data point a noise sample pairs with, so it learns the average velocity over all candidates, and the true flow bends. Even so, paths are straighter than diffusion's, 20 to 30 steps is common, and the objective is a plain regression. SD3 and Flux-class models use this with transformer denoisers, and guidance, latents and text conditioning carry over unchanged.
+The network predicts $v$ from $(x_t, t)$, and sampling integrates $dx/dt = v$ from $t = 1$ (noise) to $t = 0$, for example with Euler steps. Worked example: $x_0 = 2$, $\epsilon = -1$, so $v = -3$. At $t = 0.5$, $x = 0.5$. One Euler step from $t = 1$ ($x = -1$) to $t = 0$ gives $-1 - 1 \times (-3) = 2$, exactly $x_0$. For a single pair the path is straight and one step is exact. At inference the network does not know which data point a noise sample pairs with, so it learns the average velocity over all candidates, and the true flow bends. Even so, paths are straighter than diffusion's, 20 to 30 steps is common, and the objective is a plain regression. SD3 and Flux-class models use this with transformer denoisers, and guidance, latents and text conditioning carry over unchanged.
 
 ### Check yourself
 
-1. At abar = 0.5, what are the signal and noise coefficients for x_t, and the SNR?
+1. At $\bar\alpha = 0.5$, what are the signal and noise coefficients for $x_t$, and the SNR?
 
 <details><summary>Answer</summary>
 
-Both are sqrt(0.5) = 0.707. SNR = 0.5 / 0.5 = 1.
+Both are $\sqrt{0.5} = 0.707$. $\text{SNR} = 0.5 / 0.5 = 1$.
 
 </details>
 
@@ -707,7 +735,7 @@ Both are sqrt(0.5) = 0.707. SNR = 0.5 / 0.5 = 1.
 
 <details><summary>Answer</summary>
 
-For one pair the velocity is the constant eps - x0, so the path is straight. For a dataset the network sees only x_t and t and outputs the expected velocity over all pairs that could have produced x_t. That expectation changes along the path, so the true flow bends and needs more steps.
+For one pair the velocity is the constant $\epsilon - x_0$, so the path is straight. For a dataset the network sees only $x_t$ and $t$ and outputs the expected velocity over all pairs that could have produced $x_t$. That expectation changes along the path, so the true flow bends and needs more steps.
 
 </details>
 
@@ -725,15 +753,15 @@ Discretisation error from large steps is systematic: samples are pulled toward t
 
 ### Video as many images
 
-**Token budget arithmetic.** Suppose a frame costs 258 tokens (an older Gemini figure) and audio costs about 32 tokens per second. One hour at 1 frame per second is 3,600 x 258 = 928,800 frame tokens plus 3,600 x 32 = 115,200 audio tokens, about 1.04 million. A 45-minute video at the same settings is 783,000 tokens (exercise P8), and a 200,000-token context fits it with audio only at about 0.16 frames per second. Cost and context, not model quality, are the first constraints.
+**Token budget arithmetic.** Suppose a frame costs 258 tokens (an older Gemini figure) and audio costs about 32 tokens per second. One hour at 1 frame per second is $3{,}600 \times 258 = 928{,}800$ frame tokens plus $3{,}600 \times 32 = 115{,}200$ audio tokens, about 1.04 million. A 45-minute video at the same settings is 783,000 tokens (exercise P8), and a 200,000-token context fits it with audio only at about 0.16 frames per second. Cost and context, not model quality, are the first constraints.
 
-**Encoding choices.** Per-frame image encoding with concatenation is simplest and works with any VLM. Spatio-temporal patches ("tubelets", as in ViViT) span 2 frames x 16 x 16 pixels, so 8 frames of 224 px give 4 temporal slots x 196 patches = 784 tokens instead of 1,568, because neighbouring frames are redundant. Timestamps as text between frames ("00:12") help the LLM answer "when" questions.
+**Encoding choices.** Per-frame image encoding with concatenation is simplest and works with any VLM. Spatio-temporal patches ("tubelets", as in ViViT) span $2 \text{ frames} \times 16 \times 16$ pixels, so 8 frames of 224 px give $4 \text{ temporal slots} \times 196 \text{ patches} = 784$ tokens instead of 1,568, because neighbouring frames are redundant. Timestamps as text between frames ("00:12") help the LLM answer "when" questions.
 
 ### Sampling strategies
 
 | Strategy | How | Good for | Fails on |
 |---|---|---|---|
-| Uniform | k frames at the centres of k equal segments | General summaries | Short events between samples |
+| Uniform | $k$ frames at the centres of $k$ equal segments | General summaries | Short events between samples |
 | Fixed fps with a cap | 1 fps, thinned when over budget | Most products | Long videos, fast action |
 | Keyframes | Keep frames that changed enough from the last kept frame | Slides, lectures, scene cuts | Noisy video, very slow changes |
 | Query-aware | Retrieve candidate frames by text similarity, then sample densely near them | Questions about specific moments | Questions needing the whole video |
@@ -741,19 +769,19 @@ Discretisation error from large steps is systematic: samples are pulled toward t
 
 In the exercise, a 2-frame flash at indices 40 and 41 of a 100-frame clip falls between 10 uniform samples (indices 5, 15, ..., 95), and keyframe selection finds it. A keyframe threshold that is too low picks up camera noise and one that is too high skips real transitions.
 
-Hierarchical cost for a one-hour video: a coarse pass at 0.1 fps is 360 frames, and three 20-second windows at 2 fps add 120. That is 480 x 258 = 123,840 tokens versus 928,800 at 1 fps everywhere, 7.5 times cheaper, with twice the temporal resolution in the windows. The price is two model calls and the risk that the coarse pass points to the wrong windows. A timestamped transcript resolves many questions that frames cannot, at far fewer tokens.
+Hierarchical cost for a one-hour video: a coarse pass at 0.1 fps is 360 frames, and three 20-second windows at 2 fps add 120. That is $480 \times 258 = 123{,}840$ tokens versus 928,800 at 1 fps everywhere, 7.5 times cheaper, with twice the temporal resolution in the windows. The price is two model calls and the risk that the coarse pass points to the wrong windows. A timestamped transcript resolves many questions that frames cannot, at far fewer tokens.
 
 ### Grounding: boxes as text
 
-Many VLMs answer "where is X?" by writing coordinates as text, usually a box (x1, y1, x2, y2) on a normalised 0 to 1000 grid. Precision is limited to the grid and nothing guarantees that x2 > x1. Three silent bugs cause most "the model is bad at boxes" reports:
+Many VLMs answer "where is X?" by writing coordinates as text, usually a box $(x_1, y_1, x_2, y_2)$ on a normalised 0 to 1000 grid. Precision is limited to the grid and nothing guarantees that $x_2 \gt x_1$. Three silent bugs cause most "the model is bad at boxes" reports:
 
-1. **Coordinate convention.** Normalised 0 to 1000 versus 0 to 1 versus pixels, and xyxy versus xywh. A box (250, 500, 750, 1000) on a 640 x 480 image is (160, 240, 480, 480) in pixels. Compare it with pixel ground truth unconverted and IoU collapses.
-2. **Letterbox padding.** If you pad a 1,000 x 500 image to 1,000 x 1,000 with 250 rows on top and bottom, the model's coordinates are in the padded frame. A box at y from 400 to 600 is y from 150 to 350 in the original. Forget the offset and a 200 x 200 box is displaced by 250 px, so IoU is zero.
+1. **Coordinate convention.** Normalised 0 to 1000 versus 0 to 1 versus pixels, and xyxy versus xywh. A box (250, 500, 750, 1000) on a $640 \times 480$ image is (160, 240, 480, 480) in pixels. Compare it with pixel ground truth unconverted and IoU collapses.
+2. **Letterbox padding.** If you pad a $1{,}000 \times 500$ image to $1{,}000 \times 1{,}000$ with 250 rows on top and bottom, the model's coordinates are in the padded frame. A box at y from 400 to 600 is y from 150 to 350 in the original. Forget the offset and a $200 \times 200$ box is displaced by 250 px, so IoU is zero.
 3. **Resizing and tiling** change the frame the model saw. Keep the transform and invert it.
 
 ### Intersection over union
 
-IoU = area(A and B) / area(A or B). Two 10 x 10 boxes shifted 2 px: intersection 80, union 120, IoU 0.667. Shifted 4 px: 60 / 140 = 0.43, below the common 0.5 threshold. The same 2 px shift on 100 x 100 boxes gives 9,800 / 10,200 = 0.96. IoU is far stricter on small objects. **Acc@0.5** scores referring-expression tasks (one box per query, correct at IoU 0.5 or more). **Average precision** scores detection: rank predictions by confidence, mark true and false positives by greedy matching, integrate precision over recall. Example: two ground-truth objects and three predictions ranked true positive, false positive, true positive. Precision at each rank is 1, 1/2, 2/3 and recall is 1/2, 1/2, 1. The precision envelope is 1, 2/3, 2/3, so AP = 0.5 x 1 + 0.5 x 2/3 = 0.833. A confident false positive ranked first would give 0.667 for the same predictions. Exercise 6 builds all of this.
+$\text{IoU} = \operatorname{area}(A \cap B) / \operatorname{area}(A \cup B)$. Two $10 \times 10$ boxes shifted 2 px: intersection 80, union 120, IoU 0.667. Shifted 4 px: $60 / 140 = 0.43$, below the common 0.5 threshold. The same 2 px shift on $100 \times 100$ boxes gives $9{,}800 / 10{,}200 = 0.96$. IoU is far stricter on small objects. **Acc@0.5** scores referring-expression tasks (one box per query, correct at IoU 0.5 or more). **Average precision** scores detection: rank predictions by confidence, mark true and false positives by greedy matching, integrate precision over recall. Example: two ground-truth objects and three predictions ranked true positive, false positive, true positive. Precision at each rank is $1, \tfrac{1}{2}, \tfrac{2}{3}$ and recall is $\tfrac{1}{2}, \tfrac{1}{2}, 1$. The precision envelope is $1, \tfrac{2}{3}, \tfrac{2}{3}$, so $\text{AP} = 0.5 \times 1 + 0.5 \times \tfrac{2}{3} = 0.833$. A confident false positive ranked first would give 0.667 for the same predictions. Exercise 6 builds all of this.
 
 ### Check yourself
 
@@ -761,15 +789,15 @@ IoU = area(A and B) / area(A or B). Two 10 x 10 boxes shifted 2 px: intersection
 
 <details><summary>Answer</summary>
 
-1,800 x 70 = 126,000 tokens. For 60,000: 60,000 / 70 = 857 frames, so 857 / 1,800 = 0.476 fps, a frame every 2.1 seconds.
+$1{,}800 \times 70 = 126{,}000$ tokens. For 60,000: $60{,}000 / 70 = 857$ frames, so $857 / 1{,}800 = 0.476$ fps, a frame every 2.1 seconds.
 
 </details>
 
-2. Two 50 x 50 boxes are offset by 5 px horizontally. IoU?
+2. Two $50 \times 50$ boxes are offset by 5 px horizontally. IoU?
 
 <details><summary>Answer</summary>
 
-Intersection 45 x 50 = 2,250. Union 2 x 2,500 - 2,250 = 2,750. IoU = 0.818.
+Intersection $45 \times 50 = 2{,}250$. Union $2 \times 2{,}500 - 2{,}250 = 2{,}750$. $\text{IoU} = 2{,}250 / 2{,}750 = 0.818$.
 
 </details>
 
@@ -793,21 +821,21 @@ The README lists the standard benchmarks (VQAv2, DocVQA, ChartQA, TextVQA, OCRBe
 - **Language priors.** Run the benchmark with the image blanked. If accuracy stays far above chance, it measures language prior as much as vision.
 - **Aggregates hide failure modes.** Report by category: counting, spatial relations, text reading, charts, reasoning.
 
-For your product, build a labelled set from real traffic, split by slice, with confidence intervals. With 200 examples at 90% accuracy the 95% interval is plus or minus 4 points (1.96 x sqrt(0.9 x 0.1 / 200) = 0.042), so a 2-point gain is invisible.
+For your product, build a labelled set from real traffic, split by slice, with confidence intervals. With 200 examples at 90% accuracy the 95% interval is plus or minus 4 points ($1.96 \sqrt{0.9 \times 0.1 / 200} = 0.042$), so a 2-point gain is invisible.
 
 ### Object hallucination
 
 The model describes things that are not in the image. Causes: the language prior and co-occurrence (kitchens have refrigerators), weak grounding or low resolution (small objects are not encoded, so the model fills in), teacher hallucinations in synthetic training data, and long outputs where the model conditions more on its own earlier words than on the image.
 
-**POPE** turns this into balanced yes/no questions, "Is there a {object} in the image?", half about present objects and half about absent ones. Absent objects are sampled three ways: random, popular (the most frequent in the dataset), and adversarial (those that co-occur with present objects). Report accuracy, precision, recall, F1 and the **yes-rate**. Worked example (exercise P9): 500 present and 500 absent questions, yes to 475 of the present and 200 of the absent. Accuracy 77.5%, precision 70.4%, recall 95%, F1 0.81, yes-rate 67.5%. A 40% false-positive rate on absent objects is a yes-bias that accuracy alone hides. **CHAIR** measures it in free-form captions: CHAIR_i is hallucinated mentions over all object mentions, and CHAIR_s is the share of captions with at least one hallucinated object. With 100 captions, 400 mentions and 20 hallucinated mentions spread over 15 captions, CHAIR_i = 5% and CHAIR_s = 15%. Short captions score well on CHAIR by saying little, so pair it with a coverage measure.
+**POPE** turns this into balanced yes/no questions, "Is there a {object} in the image?", half about present objects and half about absent ones. Absent objects are sampled three ways: random, popular (the most frequent in the dataset), and adversarial (those that co-occur with present objects). Report accuracy, precision, recall, F1 and the **yes-rate**. Worked example (exercise P9): 500 present and 500 absent questions, yes to 475 of the present and 200 of the absent. Accuracy 77.5%, precision 70.4%, recall 95%, F1 0.81, yes-rate 67.5%. A 40% false-positive rate on absent objects is a yes-bias that accuracy alone hides. **CHAIR** measures it in free-form captions: $\text{CHAIR} _i$ is hallucinated mentions over all object mentions, and $\text{CHAIR} _s$ is the share of captions with at least one hallucinated object. With 100 captions, 400 mentions and 20 hallucinated mentions spread over 15 captions, $\text{CHAIR} _i = 20 / 400$, or 5%, and $\text{CHAIR} _s = 15 / 100$, or 15%. Short captions score well on CHAIR by saying little, so pair it with a coverage measure.
 
 Mitigations, in the order I would try them: raise the effective resolution or crop and re-ask; prompt for abstention ("say not visible if unclear") and test it on true presences as well as absences, because some models then refuse real objects; ground first (ask for a box or a quote of the evidence, then verify with a detector or OCR); train with preference data whose rejected answers contain hallucinations; contrastive decoding against a no-image or distorted-image pass; and verify numbers outside the model (Part 4).
 
 ### Evaluating generation
 
-- **FID** compares real and generated images as Gaussians in an Inception feature space: ||mu_1 - mu_2||^2 + Tr(S_1 + S_2 - 2 (S_1 S_2)^(1/2)). It needs thousands of samples and says nothing about whether one image matches its prompt.
+- **FID** compares real and generated images as Gaussians in an Inception feature space: $\lVert \mu_1 - \mu_2 \rVert^2 + \operatorname{Tr}\big(\Sigma_1 + \Sigma_2 - 2 (\Sigma_1 \Sigma_2)^{1/2}\big)$. It needs thousands of samples and says nothing about whether one image matches its prompt.
 - **CLIPScore** is the scaled cosine similarity of image and prompt embeddings and inherits CLIP's weakness on counting and attribute binding. Compositional checks (GenEval-style) catch what it misses.
-- **Human preference** is the gold standard, aggregated with a Bradley-Terry or Elo model. A 100-point rating gap means the stronger model wins 1 / (1 + 10^(-100 / 400)) = 64% of the time, and 200 points gives 76%. Noise matters: 200 comparisons at a 55% win rate give a standard error of sqrt(0.55 x 0.45 / 200) = 3.5 points, so the 95% interval of about 48% to 62% includes parity.
+- **Human preference** is the gold standard, aggregated with a Bradley-Terry or Elo model. A 100-point rating gap means the stronger model wins $1 / (1 + 10^{-100/400}) = 0.64$, or 64%, of the time, and 200 points gives 76%. Noise matters: 200 comparisons at a 55% win rate give a standard error of $\sqrt{0.55 \times 0.45 / 200} = 0.035$, or 3.5 points, so the 95% interval of about 48% to 62% includes parity.
 
 
 ### Safety and provenance, briefly
@@ -828,15 +856,15 @@ Most questions can be answered from language alone, so the image adds only about
 
 <details><summary>Answer</summary>
 
-Of 1,000 questions, 850 yes answers include at most 500 correct ones, so at least 350 are false positives. At most 150 of the 500 absent objects get a correct "no", so accuracy is at most (500 + 150) / 1,000 = 65%.
+Of 1,000 questions, 850 yes answers include at most 500 correct ones, so at least 350 are false positives. At most 150 of the 500 absent objects get a correct "no", so accuracy is at most $(500 + 150) / 1{,}000 = 0.65$, or 65%.
 
 </details>
 
-3. 100 captions: 300 object mentions, 12 hallucinated mentions in 9 captions. CHAIR_i and CHAIR_s?
+3. 100 captions: 300 object mentions, 12 hallucinated mentions in 9 captions. $\text{CHAIR} _i$ and $\text{CHAIR} _s$?
 
 <details><summary>Answer</summary>
 
-CHAIR_i = 12 / 300 = 4%. CHAIR_s = 9 / 100 = 9%.
+$\text{CHAIR} _i = 12 / 300$, or 4%. $\text{CHAIR} _s = 9 / 100$, or 9%.
 
 </details>
 
@@ -844,7 +872,7 @@ CHAIR_i = 12 / 300 = 4%. CHAIR_s = 9 / 100 = 9%.
 
 ## Putting it together
 
-**Extract fields from 2 million scanned invoices.** Classify pages (digital or scanned, clean or messy). Use text layers where they exist. OCR the rest and pass the OCR text plus the page image to a small document VLM. Validate with arithmetic identities and checksums, escalate failures and disagreements to a larger VLM, then to human review. At 1,568 tokens per page for everything, 2M pages is 3.1 billion tokens, so the cascade matters (exercise P2). Evaluate per field on a labelled sample from every source, and watch the escalation rate as a drift signal.
+**Extract fields from 2 million scanned invoices.** Classify pages (digital or scanned, clean or messy). Use text layers where they exist. OCR the rest and pass the OCR text plus the page image to a small document VLM. Validate with arithmetic identities and checksums, escalate failures and disagreements to a larger VLM, then to human review. At 1,568 tokens per page for everything, 2M pages is $2{,}000{,}000 \times 1{,}568 \approx 3.1$ billion tokens, so the cascade matters (exercise P2). Evaluate per field on a labelled sample from every source, and watch the escalation rate as a drift signal.
 
 **Voice agent for appointment booking.** Cascaded pipeline for control and tool calls: streaming ASR, semantic turn detection, an LLM with a cached prefix, streaming TTS, barge-in with history truncation. Budget milliseconds per stage, aim for about 700 ms p50 and under 1.5 s p95, and track interruption handling and wrong-cut-off rate. Measure ASR by entity accuracy on dates, names and numbers, since WER hides the errors that matter.
 

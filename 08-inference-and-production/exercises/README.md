@@ -19,7 +19,7 @@ Further practice that overlaps this topic but is not repeated here: [KV cache](.
 | 2 | `ex02_paged_kv_cache.py` | Hard | Block tables, ref counts, chained-hash prefix reuse, LRU eviction, copy-on-write (Part 4) | 90 min |
 | 3 | `ex03_quantization.py` | Medium | Symmetric and asymmetric INT8, group-wise INT4, outliers, bits per weight, W8A8 matmul (Part 6) | 60 min |
 | 4 | `ex04_batching_sim.py` | Medium | Static versus continuous batching, convoy effect, throughput and latency percentiles (Parts 3, 5) | 60 min |
-| 5 | `ex05_capacity_planner.py` | Medium | KV-limited and ITL-limited batch, replica capacity, replicas for a QPS target, $ per million tokens (Part 9) | 60 min |
+| 5 | `ex05_capacity_planner.py` | Medium | KV-limited and ITL-limited batch, replica capacity, replicas for a QPS target, \$ per million tokens (Part 9) | 60 min |
 | 6 | `ex06_circuit_breaker.py` | Medium | Breaker state machine with an injected clock, full-jitter backoff, fallback routing (Part 10) | 60 min |
 | 7 | `ex07_queueing.py` | Medium | Little's law, M/M/1 and Erlang C, pooling, event simulation (Parts 3, 9) | 60 min |
 
@@ -35,7 +35,7 @@ A model has 48 layers, 8 KV heads, head dimension 128 and FP16 KV. Compute the K
 
 <details><summary>Answer</summary>
 
-Per token: 2 x 48 x 8 x 128 x 2 = 196,608 bytes (192 KiB). Per 32,768-token sequence: 6.44 GB. KV budget: 0.9 x 80 - 30 = 42 GB. 42 / 6.44 = 6.5, so **6 sequences**. A large context window does not mean large concurrency: six users at 32K fill the card, which is why long-context products price and limit differently.
+Per token: $2 \times 48 \times 8 \times 128 \times 2 = 196{,}608$ bytes (192 KiB). Per 32,768-token sequence: 6.44 GB. KV budget: $0.9 \times 80 - 30 = 42$ GB. $42 / 6.44 = 6.5$, so **6 sequences**. A large context window does not mean large concurrency: six users at 32K fill the card, which is why long-context products price and limit differently.
 
 </details>
 
@@ -45,7 +45,7 @@ A 34B model is stored at INT8 weights (1 byte per parameter) on GPUs with 2 TB/s
 
 <details><summary>Answer</summary>
 
-One GPU: 34e9 / 2e12 = 17 ms per token, ~59 tokens per second. Two GPUs: each reads 17 GB at 2 TB/s = 8.5 ms, plus 2 ms of all-reduce time = 10.5 ms, ~95 tokens per second, a 1.6x gain, not 2x. The all-reduce time is fixed per step and does not shrink as more GPUs are added, so scaling is sub-linear and gets worse with TP degree.
+One GPU: $34 \times 10^9 / (2 \times 10^{12}) = 17$ ms per token, ~59 tokens per second. Two GPUs: each reads 17 GB at 2 TB/s in 8.5 ms, plus 2 ms of all-reduce time, $8.5 + 2 = 10.5$ ms, ~95 tokens per second, a 1.6x gain, not 2x. The all-reduce time is fixed per step and does not shrink as more GPUs are added, so scaling is sub-linear and gets worse with TP degree.
 
 </details>
 
@@ -55,7 +55,7 @@ A GPU has 1,000 TFLOP/s and 4 TB/s. What is the ridge point, and at what batch s
 
 <details><summary>Answer</summary>
 
-Ridge = 1e15 / 4e12 = 250 FLOPs per byte. Crossover batch = ridge x bytes_per_weight / 2: FP16 gives 250 x 2 / 2 = 250, INT4 gives 250 x 0.5 / 2 = 62.5. With INT4 the matmul becomes compute-bound at a batch about four times smaller, since every FLOP is paid for with a quarter of the bytes. Below that batch INT4 decode is about 4 times faster than FP16, above it the advantage disappears unless the matmul also runs in low precision.
+Ridge: $10^{15} / (4 \times 10^{12}) = 250$ FLOPs per byte. Crossover batch: $\text{ridge} \times \text{bytes per weight} / 2$. FP16 gives $250 \times 2 / 2 = 250$, INT4 gives $250 \times 0.5 / 2 = 62.5$. With INT4 the matmul becomes compute-bound at a batch about four times smaller, since every FLOP is paid for with a quarter of the bytes. Below that batch INT4 decode is about 4 times faster than FP16, above it the advantage disappears unless the matmul also runs in low precision.
 
 </details>
 
@@ -65,17 +65,19 @@ A service handles 120 requests per second with a mean time in system of 6 s. Eac
 
 <details><summary>Answer</summary>
 
-In flight L = 120 x 6 = 720. KV = 720 x 2,200 x 163,840 = 259.5 GB. At 9 s, L = 1,080 and KV = 389 GB, 50% more memory at the same traffic. If the fleet is sized for 6 s, the extra concurrency exhausts KV, requests queue or are preempted, latency rises further, and the system spirals. Latency is a capacity input, not only an output.
+In flight: $L = 120 \times 6 = 720$. KV: $720 \times 2{,}200 \times 163{,}840 \text{ B} = 259.5 \text{ GB}$. At 9 s, $L = 1{,}080$ and KV is 389 GB, 50% more memory at the same traffic. If the fleet is sized for 6 s, the extra concurrency exhausts KV, requests queue or are preempted, latency rises further, and the system spirals. Latency is a capacity input, not only an output.
 
 </details>
 
 ### P5. Choosing the speculation depth
 
-A drafter costs 8% of a target step (c = 0.08) and has per-token acceptance alpha = 0.75. Compare k = 3 and k = 5. Which is better, and what happens to the choice if alpha drops to 0.5?
+A drafter costs 8% of a target step ($c = 0.08$) and has per-token acceptance $\alpha = 0.75$. Compare $k = 3$ and $k = 5$. Which is better, and what happens to the choice if $\alpha$ drops to 0.5?
 
 <details><summary>Answer</summary>
 
-E(k) = (1 - alpha^(k+1)) / (1 - alpha). k = 3: (1 - 0.3164) / 0.25 = 2.734 tokens at cost 1 + 3 x 0.08 = 1.24, so 2.21x. k = 5: (1 - 0.1780) / 0.25 = 3.288 tokens at cost 1.40, so 2.35x. Depth 5 is slightly better. At alpha = 0.5: k = 3 gives 1.875 / 1.24 = 1.51x, k = 5 gives 1.969 / 1.40 = 1.41x, so the shorter draft wins because later positions are rarely accepted. Also check the batch: at high batch, verification is no longer free.
+$$E(k) = \frac{1 - \alpha^{k+1}}{1 - \alpha}$$
+
+$k = 3$: $(1 - 0.3164) / 0.25 = 2.734$ tokens at cost $1 + 3 \times 0.08 = 1.24$, so 2.21x. $k = 5$: $(1 - 0.1780) / 0.25 = 3.288$ tokens at cost 1.40, so 2.35x. Depth 5 is slightly better. At $\alpha = 0.5$: $k = 3$ gives $1.875 / 1.24 = 1.51\times$, $k = 5$ gives $1.969 / 1.40 = 1.41\times$, so the shorter draft wins because later positions are rarely accepted. Also check the batch: at high batch, verification is no longer free.
 
 </details>
 
@@ -85,7 +87,7 @@ You have 8 replicas of a 70B model. 500 tenants each send a unique 4,000-token s
 
 <details><summary>Answer</summary>
 
-Each replica holds 40 / 1.31 = ~30 prefixes. Round-robin sends every tenant to every replica, so each replica sees 500 prefixes and can hold 30: a hit rate near 30 / 500 = 6% (LRU with uniform traffic). Hash routing gives each replica 500 / 8 = 62.5 tenants, so the hit rate is about 30 / 62.5 = 48%, and it rises as replicas are added. What breaks: hot tenants overload their replica (add a load cap with spill to a second replica), failures reshuffle the mapping (use consistent hashing), and the cache competes with running sequences for the same memory, so the true budget is smaller.
+Each replica holds $40 / 1.31 \approx 30$ prefixes. Round-robin sends every tenant to every replica, so each replica sees 500 prefixes and can hold 30: a hit rate near $\tfrac{30}{500}$, or 6% (LRU with uniform traffic). Hash routing gives each replica $500 / 8 = 62.5$ tenants, so the hit rate is about $\tfrac{30}{62.5}$, or 48%, and it rises as replicas are added. What breaks: hot tenants overload their replica (add a load cap with spill to a second replica), failures reshuffle the mapping (use consistent hashing), and the cache competes with running sequences for the same memory, so the true budget is smaller.
 
 </details>
 
@@ -95,7 +97,7 @@ You want one 80 GB GPU to serve a 70B model with 16 concurrent 8K-token sequence
 
 <details><summary>Answer</summary>
 
-KV at FP16 = 16 x 8,192 x 327,680 = 42.9 GB. Total 36.1 + 42.9 = 79.0 GB against 72 GB usable: does not fit. With FP8 KV: 21.5 GB, total 57.6 GB, which fits with ~14 GB spare. The cost is two quality risks to test: INT4 weights and FP8 KV, especially on long-context retrieval. Alternative: two GPUs with TP and FP8 weights, no 4-bit risk, double the hardware cost.
+KV at FP16: $16 \times 8{,}192 \times 327{,}680 \text{ B} = 42.9 \text{ GB}$. Total $36.1 + 42.9 = 79.0$ GB against 72 GB usable: does not fit. With FP8 KV: 21.5 GB, total $36.1 + 21.5 = 57.6$ GB, which fits with ~14 GB spare. The cost is two quality risks to test: INT4 weights and FP8 KV, especially on long-context retrieval. Alternative: two GPUs with TP and FP8 weights, no 4-bit risk, double the hardware cost.
 
 </details>
 
@@ -105,7 +107,7 @@ Measured: P99 TTFT 1.2 s, P99 ITL 80 ms, maximum output 800 tokens. Propose conn
 
 <details><summary>Answer</summary>
 
-Connect 3 s (network or balancer down). TTFT 3 s, about 2.5 times P99, to catch a stuck queue or prefill without firing on normal tails. Idle (inter-chunk) 10 s, over 100 times the P99 ITL, to catch a stalled stream quickly without tripping on a legitimate preemption pause. Total: 1.2 s + 800 x 0.08 s = 65 s expected worst case, so cap at about 90 s to bound cost and user patience. A single 90 s timeout would take 90 s to notice a frozen stream.
+Connect 3 s (network or balancer down). TTFT 3 s, about 2.5 times P99, to catch a stuck queue or prefill without firing on normal tails. Idle (inter-chunk) 10 s, over 100 times the P99 ITL, to catch a stalled stream quickly without tripping on a legitimate preemption pause. Total: $1.2 \text{ s} + 800 \times 0.08 \text{ s} = 65 \text{ s}$ expected worst case, so cap at about 90 s to bound cost and user patience. A single 90 s timeout would take 90 s to notice a frozen stream.
 
 </details>
 
@@ -115,16 +117,20 @@ A single server pool behaves like M/M/1 with a service rate of 4 requests per se
 
 <details><summary>Answer</summary>
 
-M/M/1: W = 1 / (mu - lambda), P99 = ln(100) / (mu - lambda). At 2 per second (50% load): W = 0.5 s, P99 = 2.3 s. At 3.6 per second (90% load): W = 2.5 s, P99 = 11.5 s. Load rose 80% while P99 rose 5 times. With 4 servers sharing one queue (M/M/4, a = 3.6 with per-server load 90%, total lambda 14.4) the chance of waiting (Erlang C) is about 0.79 and mean wait is about 0.79 / (16 - 14.4) = 0.49 s, versus 2.25 s of queueing for a single server at the same load. Pooling shrinks waits sharply, which is why one shared pool beats separate per-tenant pools at equal utilisation, and why routing that fragments traffic hurts.
+For M/M/1:
+
+$$W = \frac{1}{\mu - \lambda}, \qquad P_{99} = \frac{\ln 100}{\mu - \lambda}$$
+
+At 2 per second (50% load): $W = 0.5$ s, P99 = 2.3 s. At 3.6 per second (90% load): $W = 2.5$ s, P99 = 11.5 s. Load rose 80% while P99 rose 5 times. With 4 servers sharing one queue (M/M/4, $a = 3.6$ with per-server load 90%, total $\lambda = 14.4$) the chance of waiting (Erlang C) is about 0.79 and mean wait is about $0.79 / (16 - 14.4) = 0.49$ s, versus 2.25 s of queueing for a single server at the same load. Pooling shrinks waits sharply, which is why one shared pool beats separate per-tenant pools at equal utilisation, and why routing that fragments traffic hurts.
 
 </details>
 
 ### P10. Self-host break-even
 
-A fleet of 16 GPUs at $2.50 per hour sustains 8,000 total tokens per second at full load. An API offers equivalent quality at $0.90 per million total tokens. Compute the self-hosted cost per million tokens at 100%, 60% and 30% average utilisation, and the break-even utilisation.
+A fleet of 16 GPUs at \$2.50 per hour sustains 8,000 total tokens per second at full load. An API offers equivalent quality at \$0.90 per million total tokens. Compute the self-hosted cost per million tokens at 100%, 60% and 30% average utilisation, and the break-even utilisation.
 
 <details><summary>Answer</summary>
 
-Fleet cost = $40 per hour. At full load: 8,000 x 3,600 = 28.8M tokens per hour, so $40 / 28.8M x 1e6 = $1.39 per million. At 60% utilisation: $2.31. At 30%: $4.63. All three are above $0.90, so at this price and throughput the API wins everywhere, because even 100% utilisation costs $1.39. Break-even would need either a lower hardware cost per token (better batching, quantisation, prefix caching raising throughput to above 12,300 tokens per second at full load) or a much higher API price. This is the correct reading of the exercise: the utilisation lever only matters when the full-load cost is already below the API price.
+Fleet cost: $16 \times 2.50 = 40$, so \$40 per hour. At full load: $8{,}000 \times 3{,}600 = 28.8$ million tokens per hour, so \$40 per 28.8M tokens, or \$1.39 per million. At 60% utilisation: \$2.31. At 30%: \$4.63. All three are above \$0.90, so at this price and throughput the API wins everywhere, because even 100% utilisation costs \$1.39. Break-even would need either a lower hardware cost per token (better batching, quantisation, prefix caching raising throughput to above 12,300 tokens per second at full load) or a much higher API price. This is the correct reading of the exercise: the utilisation lever only matters when the full-load cost is already below the API price.
 
 </details>
