@@ -50,7 +50,7 @@ Some tasks cannot be written as a fixed sequence. "Fix this failing test" might 
 
 An agent is a model, a set of tools, some state, and a loop with stop conditions:
 
-```
+```text
 state = [system prompt, tool definitions, user request]
 repeat:
     response = model(state)
@@ -77,44 +77,46 @@ The decision rule is: if you can draw the flowchart, write the workflow. Move up
 
 ### What the loop costs: quadratic token growth
 
-Every iteration re-sends the whole history. If the fixed prefix (system prompt plus tool definitions) is S tokens and each step adds t tokens (the model's output plus the tool result), then call i processes S + (i - 1) t input tokens. Over n calls:
+Every iteration re-sends the whole history. If the fixed prefix (system prompt plus tool definitions) is $S$ tokens and each step adds $t$ tokens (the model's output plus the tool result), then call $i$ processes $S + (i - 1)t$ input tokens. Over $n$ calls:
 
-```
-total_input = n * S + t * (0 + 1 + ... + (n - 1)) = n * S + t * n * (n - 1) / 2
-```
-
-Worked example: S = 5,000, t = 1,000, n = 20.
-
-```
-n * S              = 20 * 5,000          = 100,000
-t * n * (n-1) / 2  = 1,000 * 190         = 190,000
-total_input                              = 290,000 tokens
-final context size                       = 5,000 + 19 * 1,000 = 24,000 tokens
+```math
+\text{total input} = nS + t\,\big(0 + 1 + \dots + (n - 1)\big) = nS + \frac{t\,n(n - 1)}{2}
 ```
 
-You process 290,000 input tokens to hold a 24,000-token conversation, about 12x. The second term grows with n squared: doubling the steps to 40 gives 40 * 5,000 + 1,000 * 780 = 980,000 tokens, 3.4x the cost for 2x the steps.
+Worked example: $S = 5{,}000$, $t = 1{,}000$, $n = 20$.
 
-Prompt caching changes the economics because each call's prefix is the previous call's full context. Only the newly appended t tokens are uncached. In the example the uncached input is 5,000 + 19 * 1,000 = 24,000 tokens and the cached reads are 290,000 - 24,000 = 266,000. If cached reads cost ~10% of the normal rate (provider-specific, so check your pricing), the effective cost is 24,000 + 26,600 = ~50,600 full-price token equivalents, roughly 5.7x cheaper than uncached. This is why agent loops must keep their prefix stable: reordering tools, editing the system prompt mid-run or inserting timestamps near the top invalidates the cache for every later call.
+```math
+\begin{aligned}
+nS &= 20 \times 5{,}000 = 100{,}000 \\
+\frac{t\,n(n - 1)}{2} &= 1{,}000 \times 190 = 190{,}000 \\
+\text{total input} &= 290{,}000 \text{ tokens} \\
+\text{final context size} &= 5{,}000 + 19 \times 1{,}000 = 24{,}000 \text{ tokens}
+\end{aligned}
+```
+
+You process 290,000 input tokens to hold a 24,000-token conversation, about 12x. The second term grows with $n^2$: doubling the steps to 40 gives $40 \times 5{,}000 + 1{,}000 \times 780 = 980{,}000$ tokens, 3.4x the cost for 2x the steps.
+
+Prompt caching changes the economics because each call's prefix is the previous call's full context. Only the newly appended $t$ tokens are uncached. In the example the uncached input is $5{,}000 + 19 \times 1{,}000 = 24{,}000$ tokens and the cached reads are $290{,}000 - 24{,}000 = 266{,}000$. If cached reads cost ~10% of the normal rate (provider-specific, so check your pricing), the effective cost is $24{,}000 + 26{,}600 \approx 50{,}600$ full-price token equivalents, roughly 5.7x cheaper than uncached. This is why agent loops must keep their prefix stable: reordering tools, editing the system prompt mid-run or inserting timestamps near the top invalidates the cache for every later call.
 
 ### What the loop costs: compounding errors
 
-If each step succeeds independently with probability p, a task of n steps succeeds with p^n:
+If each step succeeds independently with probability $p$, a task of $n$ steps succeeds with $p^n$:
 
+```math
+0.95^{20} = 0.358 \qquad 0.98^{20} = 0.668 \qquad 0.99^{20} = 0.818 \qquad 0.999^{20} = 0.980
 ```
-0.95^20 = 0.358      0.98^20 = 0.668      0.99^20 = 0.818      0.999^20 = 0.980
-```
 
-Three levers follow. Reduce n (consolidate tools, use workflows for the predictable parts). Raise p (better tool descriptions, validated arguments, smaller choices). Add recovery so a failed step is not terminal. If a step fails 5% of the time and a retry or self-correction fixes 60% of those failures, the effective per-step failure is 0.05 * 0.4 = 0.02, so p rises from 0.95 to 0.98 and the 20-step success rate from 36% to 67%. Recovery is the cheapest lever, which is why errors-as-observations (Part 4) and checkpoints (Part 8) matter so much.
+Three levers follow. Reduce $n$ (consolidate tools, use workflows for the predictable parts). Raise $p$ (better tool descriptions, validated arguments, smaller choices). Add recovery so a failed step is not terminal. If a step fails 5% of the time and a retry or self-correction fixes 60% of those failures, the effective per-step failure is $0.05 \times 0.4 = 0.02$, so $p$ rises from 0.95 to 0.98 and the 20-step success rate from 36% to 67%. Recovery is the cheapest lever, which is why errors-as-observations (Part 4) and checkpoints (Part 8) matter so much.
 
-The independence assumption is optimistic. Real failures correlate: a wrong early plan or a misread tool result poisons every later step. Treat p^n as a ceiling intuition, not a forecast, and measure end-to-end success directly (Part 10).
+The independence assumption is optimistic. Real failures correlate: a wrong early plan or a misread tool result poisons every later step. Treat $p^n$ as a ceiling intuition, not a forecast, and measure end-to-end success directly (Part 10).
 
 ### Check yourself
 
-1. A loop has S = 8,000 and t = 2,000. How many input tokens does a 10-call run process without caching?
+1. A loop has $S = 8{,}000$ and $t = 2{,}000$. How many input tokens does a 10-call run process without caching?
 
 <details><summary>Answer</summary>
 
-10 * 8,000 + 2,000 * (10 * 9 / 2) = 80,000 + 90,000 = 170,000 tokens. The final context is only 8,000 + 9 * 2,000 = 26,000.
+$10 \times 8{,}000 + 2{,}000 \times \tfrac{10 \times 9}{2} = 80{,}000 + 90{,}000 = 170{,}000$ tokens. The final context is only $8{,}000 + 9 \times 2{,}000 = 26{,}000$.
 
 </details>
 
@@ -122,7 +124,7 @@ The independence assumption is optimistic. Real failures correlate: a wrong earl
 
 <details><summary>Answer</summary>
 
-0.97^30 = 0.401. For 90% you need p^30 = 0.9, so p = 0.9^(1/30) = 0.9965, about 99.65% per step.
+$0.97^{30} = 0.401$. For 90% you need $p^{30} = 0.9$, so $p = 0.9^{1/30} = 0.9965$, about 99.65% per step.
 
 </details>
 
@@ -204,7 +206,7 @@ sequenceDiagram
 
 ### Constrained decoding and what "valid" means
 
-Models trained for tool use usually emit valid JSON, but not always. Providers can enforce structure at decode time. The mechanism: compile the schema into a grammar or state machine. At each step, compute which tokens keep the output a valid prefix of the grammar and set the logits of every other token to minus infinity before sampling. After `{"limit": ` the allowed set for an integer field with a non-negative minimum is the digit tokens, so the model cannot emit `"ten"`.
+Models trained for tool use usually emit valid JSON, but not always. Providers can enforce structure at decode time. The mechanism: compile the schema into a grammar or state machine. At each step, compute which tokens keep the output a valid prefix of the grammar and set the logits of every other token to $-\infty$ before sampling. After `{"limit": ` the allowed set for an integer field with a non-negative minimum is the digit tokens, so the model cannot emit `"ten"`.
 
 Three consequences matter:
 
@@ -220,7 +222,7 @@ A model can emit several calls in one turn when it judges them independent: fetc
 
 The model asks for `search_orders` with `{"customer_id": "cus_123", "status": "done", "limit": 500}`. A validator returns:
 
-```
+```text
 Invalid arguments for 'search_orders':
 - $.status: 'done' not in ['open', 'shipped', 'cancelled']
 - $.limit: 500 > maximum 50
@@ -266,7 +268,7 @@ A model that only calls tools reactively tends to lose the thread on multi-step 
 
 ReAct (Yao et al., 2022) interleaves reasoning and acting: the model writes a short **Thought**, picks an **Action**, receives an **Observation**, and repeats.
 
-```
+```text
 Thought: I need the customer's open orders before I can answer.
 Action: search_orders(customer_id="cus_123", status="open")
 Observation: [{"order": "A17", "status": "open"}]
@@ -281,11 +283,11 @@ The thought helps in two ways: it conditions later tokens on an explicit sub-goa
 
 A planner produces the full step list up front. An executor runs the steps, often with a cheaper model and a short context per step. If a step fails, the planner is called again with the goal, the completed steps and the failure, and returns the remaining steps.
 
-Cost sketch under stated assumptions: a 10-step task. ReAct with a large model sees an average context of 8,000 tokens per call, so 80,000 large-model tokens. Plan-and-execute uses one 3,000-token planning call on the large model plus ten step calls of ~2,000 tokens on a small model priced at ~1/10. In large-model-equivalent units that is 3,000 + 2,000 = 5,000 against 80,000, about 16x cheaper. The assumptions (short per-step contexts, a small model that can do each step) are exactly where this pattern fails: when steps need the whole history, the savings vanish.
+Cost sketch under stated assumptions: a 10-step task. ReAct with a large model sees an average context of 8,000 tokens per call, so 80,000 large-model tokens. Plan-and-execute uses one 3,000-token planning call on the large model plus ten step calls of ~2,000 tokens on a small model priced at ~1/10. In large-model-equivalent units that is $3{,}000 + 2{,}000 = 5{,}000$ against $80{,}000$, about 16x cheaper. The assumptions (short per-step contexts, a small model that can do each step) are exactly where this pattern fails: when steps need the whole history, the savings vanish.
 
 Plan-and-execute also gives a review point. A human or a rule engine can approve the plan before any side effect happens. Its weakness is brittleness: a plan is a hypothesis about an environment you have not touched yet. The replanning loop (Exercise 4) is what makes it usable:
 
-```
+```text
 steps = planner(goal)
 while steps:
     try: run steps[0]; drop it
@@ -300,16 +302,16 @@ Two budgets are separate and both matter. Step retries absorb transient errors (
 
 Reflection is generate, critique, revise. Reflexion (Shinn et al., 2023) stores verbal critiques of failed attempts and feeds them into the next attempt. Whether it helps depends entirely on the quality of the critique signal.
 
-Suppose a first attempt is correct with probability p = 0.6 and you allow up to R = 3 attempts.
+Suppose a first attempt is correct with probability $p = 0.6$ and you allow up to $R = 3$ attempts.
 
-- **Perfect external verifier** (unit tests, a compiler, a schema check), independent attempts: success = 1 - 0.4^3 = 0.936.
-- **Self-critique with a false-accept rate of a = 0.3** (the critic approves a wrong answer 30% of the time). Per attempt: correct and accepted 0.6, wrong and accepted 0.4 * 0.3 = 0.12, rejected 0.4 * 0.7 = 0.28. Over three attempts the geometric factor is 1 + 0.28 + 0.28^2 = 1.3584, so correct = 0.6 * 1.3584 = 0.815, wrong-and-accepted = 0.12 * 1.3584 = 0.163, and 0.28^3 = 0.022 is rejected every time.
+- **Perfect external verifier** (unit tests, a compiler, a schema check), independent attempts: success $= 1 - 0.4^3 = 0.936$.
+- **Self-critique with a false-accept rate** of $a = 0.3$ (the critic approves a wrong answer 30% of the time). Per attempt: correct and accepted 0.6, wrong and accepted $0.4 \times 0.3 = 0.12$, rejected $0.4 \times 0.7 = 0.28$. Over three attempts the geometric factor is $1 + 0.28 + 0.28^2 = 1.3584$, so correct $= 0.6 \times 1.3584 = 0.815$, wrong-and-accepted $= 0.12 \times 1.3584 = 0.163$, and $0.28^3 = 0.022$ is rejected every time.
 
 A leaky critic caps you near 0.82 and ships a wrong answer 16% of the time. The model also grades its own work leniently, since the critique comes from the same distribution that produced the error. Two rules follow. Ground reflection in external signals whenever possible, and expect returns to flatten after one or two rounds, because attempts are correlated (the same blind spot repeats), so the independence arithmetic above overstates the gain.
 
 ### Tree search
 
-Search methods (Tree of Thoughts and its relatives) branch: at each step, propose b candidate next steps, score them with a value function (often the model itself), keep the promising ones. Exhaustive search with branching 3 and depth 3 evaluates 3 + 9 + 27 = 39 nodes, and depth 6 gives 3 + 9 + 27 + 81 + 243 + 729 = 1,092. Beam search with width 2 keeps only the two best at each level: 3 candidates at level 1, then 6 per level, so depth 6 costs 3 + 5 * 6 = 33 evaluations. The catch is that search needs a good, cheap value estimate and a way to roll back. Tasks with irreversible side effects (sending email) cannot be explored by branching in the real world. It fits reasoning and code generation, where candidates are just text and tests give a score. Few production agents use full tree search; best-of-n with a verifier is the common cheap form.
+Search methods (Tree of Thoughts and its relatives) branch: at each step, propose $b$ candidate next steps, score them with a value function (often the model itself), keep the promising ones. Exhaustive search with branching 3 and depth 3 evaluates $3 + 9 + 27 = 39$ nodes, and depth 6 gives $3 + 9 + 27 + 81 + 243 + 729 = 1{,}092$. Beam search with width 2 keeps only the two best at each level: 3 candidates at level 1, then 6 per level, so depth 6 costs $3 + 5 \times 6 = 33$ evaluations. The catch is that search needs a good, cheap value estimate and a way to roll back. Tasks with irreversible side effects (sending email) cannot be explored by branching in the real world. It fits reasoning and code generation, where candidates are just text and tests give a score. Few production agents use full tree search; best-of-n with a verifier is the common cheap form.
 
 ### Check yourself
 
@@ -325,7 +327,7 @@ So the planner returns only the remaining work, does not redo finished steps and
 
 <details><summary>Answer</summary>
 
-1 - 0.5^4 = 0.9375. If errors repeat because the model has a systematic blind spot, the real figure is lower.
+$1 - 0.5^4 = 0.9375$. If errors repeat because the model has a systematic blind spot, the real figure is lower.
 
 </details>
 
@@ -333,7 +335,7 @@ So the planner returns only the remaining work, does not redo finished steps and
 
 <details><summary>Answer</summary>
 
-Level 1: 4 candidates from the root. Levels 2 to 5: keep 3, expand each into 4, so 12 per level. Total = 4 + 4 * 12 = 52, versus 4 + 16 + 64 + 256 + 1,024 = 1,364 for the full tree.
+Level 1: 4 candidates from the root. Levels 2 to 5: keep 3, expand each into 4, so 12 per level. Total $= 4 + 4 \times 12 = 52$, versus $4 + 16 + 64 + 256 + 1{,}024 = 1{,}364$ for the full tree.
 
 </details>
 
@@ -349,7 +351,7 @@ Tools are the agent's entire interface to the world. The model sees only a name,
 
 Wrapping each REST endpoint as a tool exposes the API's shape, not the user's goals. Booking a meeting through `list_users`, `get_availability` and `create_event` is three round trips with three chances to err. A single `schedule_meeting(attendees, window)` that does the lookups internally is one call. Rule of thumb: one tool per user-level intent, with internal chaining for steps the model has no reason to branch on. Keep tools granular only where the model must make a judgement between steps, for example `search` then `read` so it can decide which hit to open.
 
-Compounding makes the argument numerically. If each call succeeds with p = 0.95, the three-call chain gives 0.857 while the consolidated call gives 0.95 (or a bit less if the internals can fail). Consolidation moves the chaining into deterministic code, where p is near 1.
+Compounding makes the argument numerically. If each call succeeds with $p = 0.95$, the three-call chain gives $0.95^3 = 0.857$ while the consolidated call gives 0.95 (or a bit less if the internals can fail). Consolidation moves the chaining into deterministic code, where $p$ is near 1.
 
 ### Names and descriptions are prompts
 
@@ -362,7 +364,7 @@ Compounding makes the argument numerically. If each call succeeds with p = 0.95,
 
 A tool failure should become a readable result, not an exception that ends the run. Compare:
 
-```
+```text
 Bad:  Traceback (most recent call last): ... KeyError: 'results' ... (900 tokens)
 Good: Error: no orders found for customer 'cus_12'. Customer IDs look like 'cus_123'.
       Did you mean 'cus_123'?
@@ -415,7 +417,7 @@ The model cannot tell "nothing exists" from "the call failed". It may conclude t
 
 <details><summary>Answer</summary>
 
-It is re-sent as part of the history on each of the 10 later calls, so 10 x 8,000 = 80,000 input tokens. With caching most of that is billed at the cheaper read rate, but the result still occupies context and dilutes attention.
+It is re-sent as part of the history on each of the 10 later calls, so $10 \times 8{,}000 = 80{,}000$ input tokens. With caching most of that is billed at the cheaper read rate, but the result still occupies context and dilutes attention.
 
 </details>
 
@@ -466,22 +468,24 @@ Long-term memory is retrieval. Writing needs a policy (what is worth remembering
 
 Similarity alone surfaces an irrelevant-but-similar year-old note over yesterday's decision. The Generative Agents paper (Park et al., 2023) scores each memory as a sum of three terms:
 
-```
-score = w_rec * recency + w_rel * relevance + w_imp * importance
-recency   = 0.5 ** (age / half_life)         age measured from last access
-relevance = cosine(query_vec, memory_vec)
-importance = a stored score in [0, 1], assigned at write time (often by an LLM)
+```math
+\begin{aligned}
+\text{score} &= w_{\text{rec}} \cdot \text{recency} + w_{\text{rel}} \cdot \text{relevance} + w_{\text{imp}} \cdot \text{importance} \\
+\text{recency} &= 0.5^{\,\text{age} / \text{half-life}} && \text{age measured from last access} \\
+\text{relevance} &= \cos(\mathbf{q}, \mathbf{m}) && \text{query and memory embeddings} \\
+\text{importance} &\in [0, 1] && \text{a stored score, assigned at write time (often by an LLM)}
+\end{aligned}
 ```
 
 Worked example with half-life 10 and all weights 1, at now = 10. The query is "python". Three memories:
 
 | Memory | Last access | Importance | Recency | Relevance | Score |
 |---|---|---|---|---|---|
-| "python deadline" | t = 0 | 0.9 | 0.5 | 0.707 | 0.5 + 0.707 + 0.9 = 2.107 |
-| "python budget" | t = 9 | 0.1 | 0.933 | 0.707 | 0.933 + 0.707 + 0.1 = 1.740 |
-| "coffee tea" | t = 9 | 0.1 | 0.933 | 0.0 | 0.933 + 0 + 0.1 = 1.033 |
+| "python deadline" | $t = 0$ | 0.9 | 0.5 | 0.707 | $0.5 + 0.707 + 0.9 = 2.107$ |
+| "python budget" | $t = 9$ | 0.1 | 0.933 | 0.707 | $0.933 + 0.707 + 0.1 = 1.740$ |
+| "coffee tea" | $t = 9$ | 0.1 | 0.933 | 0.0 | $0.933 + 0 + 0.1 = 1.033$ |
 
-The old but important memory wins over the fresh but unimportant one, and the fresh irrelevant one comes last. Recency is 0.5^(1/10) = 0.933 for age 1 and 0.5^(10/10) = 0.5 for age 10; at age 30 it is 0.125. Two details make this work in practice:
+The old but important memory wins over the fresh but unimportant one, and the fresh irrelevant one comes last. Recency is $0.5^{1/10} = 0.933$ for age 1 and $0.5^{10/10} = 0.5$ for age 10; at age 30 it is 0.125. Two details make this work in practice:
 
 - **Reinforcement on access.** Setting `last_access = now` when a memory is retrieved keeps useful memories fresh. Memories that are never used decay toward irrelevance.
 - **Scale mismatch.** Raw cosine is often compressed (0.6 to 0.9) while recency spans 0 to 1. Many implementations min-max normalise each term over the candidate set before weighting. Tune weights on real queries.
@@ -491,7 +495,7 @@ Exercise 5 implements this store, including a prune rule: delete memories that a
 ### Write policy and hygiene
 
 - **What to store.** Decisions, stable preferences, corrected mistakes, task outcomes. Not raw transcripts.
-- **When to write.** At the end of a task or at natural checkpoints, with an LLM extracting candidate facts and a dedupe step comparing them with existing memories. A memory store without deduplication fills with near-copies that crowd out the top k.
+- **When to write.** At the end of a task or at natural checkpoints, with an LLM extracting candidate facts and a dedupe step comparing them with existing memories. A memory store without deduplication fills with near-copies that crowd out the top $k$.
 - **Provenance.** Record where a memory came from. A fact the agent read from a web page is untrusted, and a poisoned memory persists across sessions, which makes it a durable prompt-injection vector (Part 9).
 
 ### Check yourself
@@ -500,7 +504,7 @@ Exercise 5 implements this store, including a prune rule: delete memories that a
 
 <details><summary>Answer</summary>
 
-0.5^(50/20) = 0.5^2.5 = 0.177.
+$0.5^{50/20} = 0.5^{2.5} = 0.177$.
 
 </details>
 
@@ -530,7 +534,7 @@ One agent with one context can run out of room, attention or specialisation. Mul
 
 ### The real benefit: context isolation
 
-An orchestrator hands a subtask to a worker with a fresh context. The worker may burn 100,000 tokens searching and reading, then returns a 1,000-token summary. With five workers the orchestrator's context grows by 5 x 1,000 = 5,000 tokens instead of 500,000. The orchestrator keeps its attention on coordination and the final answer.
+An orchestrator hands a subtask to a worker with a fresh context. The worker may burn 100,000 tokens searching and reading, then returns a 1,000-token summary. With five workers the orchestrator's context grows by $5 \times 1{,}000 = 5{,}000$ tokens instead of $500{,}000$. The orchestrator keeps its attention on coordination and the final answer.
 
 The total tokens still get spent: five workers at 100,000 each is 500,000 tokens of work, plus the orchestrator. Reported figures for production research systems put multi-agent runs at several times a single-agent chat's tokens (Anthropic's research system report cites ~15x), so the pattern has to buy a better result than the cost it adds.
 
@@ -545,13 +549,15 @@ When a planner produces tasks with dependencies, you run them as a directed acyc
 
 Worked example, a diamond: a (1s) feeds b (3s) and c (2s), and both feed d (1s).
 
-```
-total work     = 1 + 3 + 2 + 1 = 7 s
-critical path  = a -> b -> d = 1 + 3 + 1 = 5 s
-1 worker       = 7 s
-2 workers      = 5 s   (b and c run together, c waits idle for b)
-8 workers      = 5 s   (more workers cannot beat the critical path)
-max speedup    = total work / critical path = 7 / 5 = 1.4x
+```math
+\begin{aligned}
+\text{total work} &= 1 + 3 + 2 + 1 = 7\ \text{s} \\
+\text{critical path} &= a \to b \to d = 1 + 3 + 1 = 5\ \text{s} \\
+\text{1 worker} &= 7\ \text{s} \\
+\text{2 workers} &= 5\ \text{s} && \text{(b and c run together, c waits idle for b)} \\
+\text{8 workers} &= 5\ \text{s} && \text{(more workers cannot beat the critical path)} \\
+\text{max speedup} &= \frac{\text{total work}}{\text{critical path}} = \frac{7}{5} = 1.4\times
+\end{aligned}
 ```
 
 Independent fan-out is the best case: five 2-second calls take 10 s serially and 2 s in parallel. A chain gains nothing. Failure handling matters as much as speed: when one task fails, skip only its descendants and let independent branches finish, because their results are still useful and expensive to recompute. Exercise 3 implements levels, critical path, a limited-worker scheduler and failure propagation.
@@ -561,7 +567,7 @@ Independent fan-out is the best case: five 2-second calls take 10 s serially and
 - **Write-heavy work on shared state.** Two agents editing one codebase make conflicting assumptions, and neither sees the other's reasoning. Parallel reads are safe, parallel writes are not.
 - **Tightly coupled steps.** If each step needs the full context of the previous one, splitting forces lossy summaries at every boundary.
 - **Small tasks.** Coordination overhead (prompts, summaries, merging) exceeds the benefit.
-- **Reliability-critical paths.** Each agent boundary is another place for a hallucinated or dropped detail. If five hops each preserve information with 95% fidelity, 0.95^5 = 0.774 of the content survives.
+- **Reliability-critical paths.** Each agent boundary is another place for a hallucinated or dropped detail. If five hops each preserve information with 95% fidelity, $0.95^5 = 0.774$ of the content survives.
 - **When a single agent with better tools has not been tried.** The default is one agent. Add structure only when you can show where it fails.
 
 ### Check yourself
@@ -570,7 +576,7 @@ Independent fan-out is the best case: five 2-second calls take 10 s serially and
 
 <details><summary>Answer</summary>
 
-Three waves: 3 + 3 + 1 tasks, so 6 s. The lower bound is max(critical path 2 s, total work / workers = 14 / 3 = 4.67 s), and the integer packing gives 6 s.
+Three waves of 3, 3 and 1 tasks, so 6 s. The lower bound is $\max(\text{critical path}, \text{total work} / \text{workers}) = \max(2, 14/3) = 4.67$ s, and the integer packing gives 6 s.
 
 </details>
 
@@ -604,7 +610,7 @@ Parallel: reading and summarising separate modules, searching for usages, runnin
 
 ### The problem
 
-With N applications and M integrations you need N x M adapters, each with its own schema format, auth flow and quirks. The Model Context Protocol (MCP) standardises the interface so a server is written once and any compliant host can use it: N + M instead of N x M. The Language Server Protocol did the same for editors and programming languages.
+With N applications and M integrations you need $N \times M$ adapters, each with its own schema format, auth flow and quirks. The Model Context Protocol (MCP) standardises the interface so a server is written once and any compliant host can use it: $N + M$ instead of $N \times M$. The Language Server Protocol did the same for editors and programming languages.
 
 ### Architecture
 
@@ -657,10 +663,10 @@ Two details matter for agent design. A tool failure is reported inside the resul
 
 ### The cost of a large tool surface
 
-Connect six servers with 20 tools each, ~250 tokens per definition: 6 x 20 x 250 = 30,000 tokens of schema before the user says anything, and 120 tools with overlapping names. Prompt caching handles the price; it does not fix selection accuracy. Levers:
+Connect six servers with 20 tools each, ~250 tokens per definition: $6 \times 20 \times 250 = 30{,}000$ tokens of schema before the user says anything, and 120 tools with overlapping names. Prompt caching handles the price; it does not fix selection accuracy. Levers:
 
 - **Allowlist per agent**, not per server. Most agents need four or five tools.
-- **Progressive disclosure.** Keep ~5 core tools and a `search_tools(query)` tool that returns matching definitions on demand. The always-loaded cost drops from 30,000 tokens to roughly 5 x 250 plus one search tool, about 1,500, and a search result adds a few hundred tokens only when used. Some providers offer this natively as tool search with deferred loading.
+- **Progressive disclosure.** Keep ~5 core tools and a `search_tools(query)` tool that returns matching definitions on demand. The always-loaded cost drops from 30,000 tokens to roughly $5 \times 250$ plus one search tool, about 1,500, and a search result adds a few hundred tokens only when used. Some providers offer this natively as tool search with deferred loading.
 - **Code execution.** Expose tools as a typed code API in a sandbox. The model reads only the modules it needs and writes a script that composes calls, so a 10,000-row intermediate result is filtered in the sandbox and only the final output enters context. The costs are a sandbox to operate, approval gates that must live in a broker (the model's script bypasses per-call prompts otherwise), and tracing inside the sandbox.
 
 ### MCP security
@@ -676,7 +682,7 @@ Mitigations are the ordinary supply-chain set: pin versions and hash description
 
 ### Check yourself
 
-1. Why does MCP give N + M rather than N x M integrations?
+1. Why does MCP give $N + M$ rather than $N \times M$ integrations?
 
 <details><summary>Answer</summary>
 
@@ -696,7 +702,7 @@ The tool result with `isError: true`. It reaches the model as an observation so 
 
 <details><summary>Answer</summary>
 
-8 x 15 x 300 = 36,000 tokens. With 6 core tools plus a search tool at 300 tokens each: 7 x 300 = 2,100 tokens, plus a few hundred per on-demand lookup.
+$8 \times 15 \times 300 = 36{,}000$ tokens. With 6 core tools plus a search tool at 300 tokens each: $7 \times 300 = 2{,}100$ tokens, plus a few hundred per on-demand lookup.
 
 </details>
 
@@ -735,17 +741,19 @@ Choose limits from data, not intuition. Log the step counts of runs that succeed
 
 ### Retries, backoff and idempotency
 
-Transient failures (timeouts, 503s, rate limits) should be retried inside the tool wrapper, so the model never wastes a turn on them. The arithmetic: with failure probability f per attempt and a maximum of m attempts, the chance that all fail is f^m and the expected number of attempts is 1 + f + f^2 + ... + f^(m-1).
+Transient failures (timeouts, 503s, rate limits) should be retried inside the tool wrapper, so the model never wastes a turn on them. The arithmetic: with failure probability $f$ per attempt and a maximum of $m$ attempts, the chance that all fail is $f^m$ and the expected number of attempts is $1 + f + f^2 + \dots + f^{m-1}$.
 
-```
-f = 0.2, m = 3:   P(all fail) = 0.2^3 = 0.008       E[attempts] = 1 + 0.2 + 0.04 = 1.24
-f = 0.5, m = 3:   P(all fail) = 0.125               E[attempts] = 1 + 0.5 + 0.25 = 1.75
+```math
+\begin{aligned}
+f = 0.2,\ m = 3&: \quad P(\text{all fail}) = 0.2^3 = 0.008 && \mathbb{E}[\text{attempts}] = 1 + 0.2 + 0.04 = 1.24 \\
+f = 0.5,\ m = 3&: \quad P(\text{all fail}) = 0.5^3 = 0.125 && \mathbb{E}[\text{attempts}] = 1 + 0.5 + 0.25 = 1.75
+\end{aligned}
 ```
 
 Retries are cheap when failures are independent and rare, and harmful when the dependency is down, because they multiply load. Rules:
 
-- **Exponential backoff with jitter.** Delay = min(cap, base * 2^attempt), then pick a random value in [0, delay]. With base 1 s, cap 30 s the ceilings run 1, 2, 4, 8, 16, 30. Jitter stops 1,000 clients from retrying in lockstep.
-- **Circuit breaker.** After k consecutive failures, stop calling for a cool-down and return an error observation immediately ("service unavailable, try later or use another source").
+- **Exponential backoff with jitter.** $\text{delay} = \min(\text{cap}, \text{base} \cdot 2^{\text{attempt}})$, then pick a random value in $[0, \text{delay}]$. With base 1 s, cap 30 s the ceilings run 1, 2, 4, 8, 16, 30. Jitter stops 1,000 clients from retrying in lockstep.
+- **Circuit breaker.** After $k$ consecutive failures, stop calling for a cool-down and return an error observation immediately ("service unavailable, try later or use another source").
 - **Only retry idempotent operations,** or operations carrying an idempotency key (Part 4). Never blind-retry a non-idempotent write.
 
 Retry transport errors in the runtime. Return semantic errors (validation, not found, permission denied) to the model, since retrying them unchanged cannot help.
@@ -785,7 +793,7 @@ Pitfalls:
 
 <details><summary>Answer</summary>
 
-0.3^4 = 0.0081. Expected attempts = 1 + 0.3 + 0.09 + 0.027 = 1.417.
+$0.3^4 = 0.0081$. Expected attempts $= 1 + 0.3 + 0.09 + 0.027 = 1.417$.
 
 </details>
 
@@ -825,7 +833,7 @@ An agent combines an instruction-following model with the ability to act. Anythi
 
 The model receives one stream of tokens. The system prompt, the user's request, a web page and a tool result are all text, and nothing at the model level tags some of it as "data only". Training for instruction hierarchy helps, but it is statistical, not a security boundary. An attacker who can put text into any channel the model reads (a web page, an email, a GitHub issue, a PDF, a tool description, a memory entry) can try to steer it. This is **indirect prompt injection**, and it is the main agent threat because the user never types the payload.
 
-Attack success is a numbers game. If a given injection works 1% of the time and an attacker can try 100 times (100 emails, 100 pages), the chance at least one works is 1 - 0.99^100 = 0.634. A defence that "mostly works" fails at scale. The design target is **bounding the consequence of success**, not preventing every attempt.
+Attack success is a numbers game. If a given injection works 1% of the time and an attacker can try 100 times (100 emails, 100 pages), the chance at least one works is $1 - 0.99^{100} = 0.634$. A defence that "mostly works" fails at scale. The design target is **bounding the consequence of success**, not preventing every attempt.
 
 ### The lethal trifecta
 
@@ -901,7 +909,7 @@ All three: private data (database), untrusted content (tickets) and an exfiltrat
 
 <details><summary>Answer</summary>
 
-1 - 0.995^200 = 1 - 0.367 = 0.633. Low per-attempt rates still produce high cumulative risk, so bound the impact.
+$1 - 0.995^{200} = 1 - 0.367 = 0.633$. Low per-attempt rates still produce high cumulative risk, so bound the impact.
 
 </details>
 
@@ -930,61 +938,65 @@ An agent can reach the right state through a policy violation (a refund without 
 
 ### Capability versus reliability: pass@k and pass^k
 
-Run each task n times and count c successes. Two questions:
+Run each task $n$ times and count $c$ successes. Two questions:
 
-- **pass@k**: if I draw k attempts, does at least one succeed? This measures capability, the upper end of what the agent can do. It suits settings where a verifier can pick the winner, such as code with tests.
-- **pass^k** (introduced with tau-bench): do all k attempts succeed? This measures consistency, which is what a user who gets one attempt experiences, repeated across many users.
+- **pass@k**: if I draw $k$ attempts, does at least one succeed? This measures capability, the upper end of what the agent can do. It suits settings where a verifier can pick the winner, such as code with tests.
+- $\text{pass}^k$ (introduced with tau-bench): do all $k$ attempts succeed? This measures consistency, which is what a user who gets one attempt experiences, repeated across many users.
 
-For a task with true per-trial success p, treating trials as independent:
+For a task with true per-trial success $p$, treating trials as independent:
 
-```
-pass@k = 1 - (1 - p)^k          pass^k = p^k
-p = 0.8, k = 4:   pass@4 = 1 - 0.2^4 = 0.9984        pass^4 = 0.8^4 = 0.4096
-p = 0.9, k = 8:   pass@8 = 1 - 0.1^8 = ~1.0          pass^8 = 0.9^8 = 0.430
-```
-
-An agent that looks 90% reliable per attempt succeeds on all of 8 repeated attempts under half the time. When a customer can interact many times, or when you have many customers who each need it to work, pass^k is the honest number.
-
-**Estimating from finite trials.** With n trials and c successes, draw k of them without replacement:
-
-```
-pass@k  = 1 - C(n - c, k) / C(n, k)        (1.0 if n - c < k)
-pass^k  = C(c, k) / C(n, k)                (0.0 if c < k)
+```math
+\begin{aligned}
+&\text{pass@}k = 1 - (1 - p)^k && \text{pass}^k = p^k \\
+p = 0.8,\ k = 4&: \quad \text{pass@}4 = 1 - 0.2^4 = 0.9984 && \text{pass}^4 = 0.8^4 = 0.4096 \\
+p = 0.9,\ k = 8&: \quad \text{pass@}8 = 1 - 0.1^8 \approx 1.0 && \text{pass}^8 = 0.9^8 = 0.430
+\end{aligned}
 ```
 
-Worked example: n = 10, c = 3. pass@1 = 0.3. pass@5 = 1 - C(7,5)/C(10,5) = 1 - 21/252 = 0.917. pass^2 = C(3,2)/C(10,2) = 3/45 = 0.067. The ordering pass^k <= pass@1 <= pass@k always holds, and a wide gap between pass@1 and pass^k flags an agent that is capable but inconsistent.
+An agent that looks 90% reliable per attempt succeeds on all of 8 repeated attempts under half the time. When a customer can interact many times, or when you have many customers who each need it to work, $\text{pass}^k$ is the honest number.
 
-**Heterogeneity matters.** Compute these per task, then average. Suppose half the tasks always succeed (p = 1) and half succeed half the time (p = 0.5). The mean success is 0.75. The naive 0.75^4 = 0.316 is wrong. The per-task average for pass^4 is 0.5 * 1 + 0.5 * 0.5^4 = 0.531. Always-good tasks do not decay, so averaging p first understates reliability. Look at the distribution as well: a few tasks at p = 0.5 are your targets for improvement.
+**Estimating from finite trials.** With $n$ trials and $c$ successes, draw $k$ of them without replacement:
+
+```math
+\begin{aligned}
+\text{pass@}k &= 1 - \frac{\binom{n - c}{k}}{\binom{n}{k}} && (1.0 \text{ if } n - c \lt k) \\
+\text{pass}^k &= \frac{\binom{c}{k}}{\binom{n}{k}} && (0.0 \text{ if } c \lt k)
+\end{aligned}
+```
+
+Worked example: $n = 10$, $c = 3$. $\text{pass@}1 = 0.3$. $\text{pass@}5 = 1 - \binom{7}{5}/\binom{10}{5} = 1 - 21/252 = 0.917$. $\text{pass}^2 = \binom{3}{2}/\binom{10}{2} = 3/45 = 0.067$. The ordering $\text{pass}^k \le \text{pass@}1 \le \text{pass@}k$ always holds, and a wide gap between pass@1 and $\text{pass}^k$ flags an agent that is capable but inconsistent.
+
+**Heterogeneity matters.** Compute these per task, then average. Suppose half the tasks always succeed ($p = 1$) and half succeed half the time ($p = 0.5$). The mean success is 0.75. The naive $0.75^4 = 0.316$ is wrong. The per-task average for $\text{pass}^4$ is $0.5 \times 1 + 0.5 \times 0.5^4 = 0.531$. Always-good tasks do not decay, so averaging p first understates reliability. Look at the distribution as well: a few tasks at $p = 0.5$ are your targets for improvement.
 
 Exercise 7 implements both estimators, the aggregation across tasks and a confidence interval.
 
 ### Noise and sample size
 
-Success rates are proportions, so use an interval that behaves at small n. The Wilson score interval for 8 successes in 10 trials at 95% is about 0.49 to 0.94, which is too wide to say much. For 28 of 40 (0.70) it is about 0.55 to 0.82, and for 30 of 40 (0.75) about 0.60 to 0.86. The two overlap heavily, so a 5-point difference on 40 tasks is not a finding. To get a 95% interval half-width of 0.05 on the difference between two agents at p = 0.7, unpaired, you need about (1.96 * sqrt(2 * 0.7 * 0.3) / 0.05)^2 = ~645 tasks per agent. Paired comparison (same tasks for both, count disagreements) needs fewer, and repeated trials per task reduce the noise from agent randomness but not from the choice of tasks.
+Success rates are proportions, so use an interval that behaves at small n. The Wilson score interval for 8 successes in 10 trials at 95% is about 0.49 to 0.94, which is too wide to say much. For 28 of 40 (0.70) it is about 0.55 to 0.82, and for 30 of 40 (0.75) about 0.60 to 0.86. The two overlap heavily, so a 5-point difference on 40 tasks is not a finding. To get a 95% interval half-width of 0.05 on the difference between two agents at p = 0.7, unpaired, you need about $\left(1.96 \sqrt{2 \times 0.7 \times 0.3} / 0.05\right)^2 \approx 645$ tasks per agent. Paired comparison (same tasks for both, count disagreements) needs fewer, and repeated trials per task reduce the noise from agent randomness but not from the choice of tasks.
 
 ### Cost and latency as evaluation dimensions
 
-Measure **cost per successful task**, not cost per call. Include the cost of failure. Agent A costs $0.30 per run and succeeds 60% of the time. Agent B costs $0.55 per run and succeeds 90%. Cost per success is $0.50 for A and $0.61 for B, so A looks cheaper. But if each failure goes to a human at $5, the expected cost per attempt is 0.30 + 0.4 * 5 = $2.30 for A and 0.55 + 0.1 * 5 = $1.05 for B. Failure handling decides the answer. Track also steps per task, tokens per task, tool error rate, escalation rate and p95 latency.
+Measure **cost per successful task**, not cost per call. Include the cost of failure. Agent A costs \$0.30 per run and succeeds 60% of the time. Agent B costs \$0.55 per run and succeeds 90%. Cost per success is \$0.50 for A and \$0.61 for B, so A looks cheaper. But if each failure goes to a human at \$5, the expected cost per attempt is $0.30 + 0.4 \times 5 = \$2.30$ for A and $0.55 + 0.1 \times 5 = \$1.05$ for B. Failure handling decides the answer. Track also steps per task, tokens per task, tool error rate, escalation rate and p95 latency.
 
 ### Tracing and regression
 
-You cannot evaluate what you did not record. Trace every model call and tool call as spans with arguments, results, token counts and latency, tied to a run id. Tracing gives you replay for debugging and the raw material for evaluation: sample production traces, label failures, turn them into regression tasks. Keep a fixed suite that runs on every prompt, tool or model change, and compare pass^k and cost, not only pass@1.
+You cannot evaluate what you did not record. Trace every model call and tool call as spans with arguments, results, token counts and latency, tied to a run id. Tracing gives you replay for debugging and the raw material for evaluation: sample production traces, label failures, turn them into regression tasks. Keep a fixed suite that runs on every prompt, tool or model change, and compare $\text{pass}^k$ and cost, not only pass@1.
 
 ### Check yourself
 
-1. n = 8 trials, c = 6 successes. Compute pass^2 and pass@2.
+1. $n = 8$ trials, $c = 6$ successes. Compute $\text{pass}^2$ and pass@2.
 
 <details><summary>Answer</summary>
 
-pass^2 = C(6,2)/C(8,2) = 15/28 = 0.536. pass@2 = 1 - C(2,2)/C(8,2) = 1 - 1/28 = 0.964.
+$\text{pass}^2 = \binom{6}{2}/\binom{8}{2} = 15/28 = 0.536$. $\text{pass@}2 = 1 - \binom{2}{2}/\binom{8}{2} = 1 - 1/28 = 0.964$.
 
 </details>
 
-2. Why can an agent have high pass@5 and low pass^5, and which should you report for an unattended customer-facing agent?
+2. Why can an agent have high pass@5 and low $\text{pass}^5$, and which should you report for an unattended customer-facing agent?
 
 <details><summary>Answer</summary>
 
-It succeeds sometimes but not consistently: one success in five tries gives pass@5 = 1 and pass^5 = 0. For an unattended customer agent report pass^k (and pass@1), since every interaction must work.
+It succeeds sometimes but not consistently: one success in five tries gives $\text{pass@}5 = 1$ and $\text{pass}^5 = 0$. For an unattended customer agent report $\text{pass}^k$ (and pass@1), since every interaction must work.
 
 </details>
 
@@ -992,7 +1004,7 @@ It succeeds sometimes but not consistently: one success in five tries gives pass
 
 <details><summary>Answer</summary>
 
-0.95^10 = 0.599.
+$0.95^{10} = 0.599$.
 
 </details>
 
@@ -1016,13 +1028,13 @@ A strong interview answer or a real design walks the same path.
 4. **Manage memory deliberately.** Clear stale results, compact with care, keep notes outside the window, score long-term retrieval by recency, relevance and importance, track provenance (Part 5).
 5. **Bound everything.** Iteration, token, cost and time limits, duplicate detection, retries with backoff for idempotent calls, checkpoints, tiered approvals (Part 8).
 6. **Assume the context will be attacked.** Do the trifecta check for each agent, apply least privilege and egress controls, put irreversible actions behind approval, use per-user credentials (Part 9).
-7. **Measure before claiming.** Outcome checks plus trajectory properties, pass@1 and pass^k over many trials, intervals, cost per success including failure handling, full traces (Part 10).
+7. **Measure before claiming.** Outcome checks plus trajectory properties, pass@1 and $\text{pass}^k$ over many trials, intervals, cost per success including failure handling, full traces (Part 10).
 
 The coding exercises mirror this sequence: validate arguments (Exercise 1), run a bounded loop with errors as observations (Exercise 2), schedule dependent calls (Exercise 3), plan and replan (Exercise 4), retrieve memories by score (Exercise 5), guard against exfiltration (Exercise 6) and compute reliability metrics (Exercise 7).
 
 ## Exercises
 
-Hands-on practice lives in [exercises/README.md](exercises/README.md): seven coding exercises (a JSON-Schema validator, a ReAct loop with budgets, a DAG executor, plan-and-execute with replanning, a scored memory store, a taint-tracking capability guard and a pass@k/pass^k calculator), each with tests and a reference solution, plus pen-and-paper design exercises. For the basic agent loop, retry logic and evaluation metrics, see [../12-coding-challenges/10_agent_loop.py](../12-coding-challenges/10_agent_loop.py), [../12-coding-challenges/11_rate_limiter_and_retry.py](../12-coding-challenges/11_rate_limiter_and_retry.py) and [../12-coding-challenges/12_eval_metrics.py](../12-coding-challenges/12_eval_metrics.py).
+Hands-on practice lives in [exercises/README.md](exercises/README.md): seven coding exercises (a JSON-Schema validator, a ReAct loop with budgets, a DAG executor, plan-and-execute with replanning, a scored memory store, a taint-tracking capability guard and a pass@k and $\text{pass}^k$ calculator), each with tests and a reference solution, plus pen-and-paper design exercises. For the basic agent loop, retry logic and evaluation metrics, see [../12-coding-challenges/10_agent_loop.py](../12-coding-challenges/10_agent_loop.py), [../12-coding-challenges/11_rate_limiter_and_retry.py](../12-coding-challenges/11_rate_limiter_and_retry.py) and [../12-coding-challenges/12_eval_metrics.py](../12-coding-challenges/12_eval_metrics.py).
 
 ## Further study
 
@@ -1038,7 +1050,7 @@ Hands-on practice lives in [exercises/README.md](exercises/README.md): seven cod
 - [Plan-and-Solve Prompting](https://arxiv.org/abs/2305.04091) - Wang et al., plan-first prompting.
 - [Toolformer: Language Models Can Teach Themselves to Use Tools](https://arxiv.org/abs/2302.04761) - Schick et al.
 - [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442) - Park et al., the recency, relevance and importance retrieval score.
-- [tau-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains](https://arxiv.org/abs/2406.12045) - Yao et al., the pass^k reliability metric.
+- [tau-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains](https://arxiv.org/abs/2406.12045) - Yao et al., the $\text{pass}^k$ reliability metric.
 - [Evaluating Large Language Models Trained on Code](https://arxiv.org/abs/2107.03374) - Chen et al., the unbiased pass@k estimator.
 - [Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection](https://arxiv.org/abs/2302.12173) - Greshake et al.
 - [Design Patterns for Securing LLM Agents against Prompt Injections](https://arxiv.org/abs/2506.08837) - Beurer-Kellner et al.

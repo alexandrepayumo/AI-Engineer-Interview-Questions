@@ -31,21 +31,27 @@ Attempt each before opening the answer. Use a calculator only for logarithms.
 
 ### P1. BM25 by hand
 
-A corpus has N = 10,000 chunks and avgdl = 100 tokens. The term "throttle" appears in 10 chunks. A chunk of 200 tokens contains it twice. Compute the BM25 contribution of this term with k1 = 1.2, b = 0.75 (Lucene IDF form).
+A corpus has $N = 10{,}000$ chunks and $\text{avgdl} = 100$ tokens. The term "throttle" appears in 10 chunks. A chunk of 200 tokens contains it twice. Compute the BM25 contribution of this term with $k_1 = 1.2$, $b = 0.75$ (Lucene IDF form).
 
 <details><summary>Answer</summary>
 
-IDF = ln(1 + (10,000 - 10 + 0.5) / (10 + 0.5)) = ln(1 + 951.5) = 6.859. TF component = 2 x 2.2 / (2 + 1.2 x (0.25 + 0.75 x 2)) = 4.4 / (2 + 2.1) = 1.073. Contribution = 6.859 x 1.073 = 7.36. The chunk is twice average length, so length normalisation reduces the TF factor from 1.375 (average length) to 1.073.
+$$\operatorname{IDF} = \ln\left(1 + \frac{10{,}000 - 10 + 0.5}{10 + 0.5}\right) = \ln(1 + 951.5) = 6.859$$
+
+$$\text{TF component} = \frac{2 \times 2.2}{2 + 1.2 \times (0.25 + 0.75 \times 2)} = \frac{4.4}{2 + 2.1} = 1.073$$
+
+$$\text{contribution} = 6.859 \times 1.073 = 7.36$$
+
+The chunk is twice average length, so length normalisation reduces the TF factor from 1.375 (average length) to 1.073.
 
 </details>
 
 ### P2. RRF over three lists
 
-Rankings (k = 60): list 1 = a, b, c. List 2 = b, c, d. List 3 = d, a, b. Compute the fused order.
+Rankings ($k = 60$): list 1 = a, b, c. List 2 = b, c, d. List 3 = d, a, b. Compute the fused order.
 
 <details><summary>Answer</summary>
 
-b: 1/62 + 1/61 + 1/63 = 0.04840. a: 1/61 + 1/62 = 0.03252. d: 1/63 + 1/61 = 0.03227. c: 1/63 + 1/62 = 0.03200. Order: b, a, d, c. b wins because it appears in all three lists, even though it is first in only one.
+b: $1/62 + 1/61 + 1/63 = 0.04840$. a: $1/61 + 1/62 = 0.03252$. d: $1/63 + 1/61 = 0.03227$. c: $1/63 + 1/62 = 0.03200$. Order: b, a, d, c. b wins because it appears in all three lists, even though it is first in only one.
 
 </details>
 
@@ -55,27 +61,39 @@ The system returns four documents with grades 0, 2, 1, 3 in that order. Compute 
 
 <details><summary>Answer</summary>
 
-DCG = 0/1 + 2/1.585 + 1/2 + 3/2.322 = 0 + 1.262 + 0.5 + 1.292 = 3.054. Ideal order 3, 2, 1, 0: 3 + 1.262 + 0.5 + 0 = 4.762. nDCG = 3.054 / 4.762 = 0.641. The best document sitting at rank 4 costs the most.
+$$\text{DCG} = \frac{0}{1} + \frac{2}{1.585} + \frac{1}{2} + \frac{3}{2.322} = 0 + 1.262 + 0.5 + 1.292 = 3.054$$
+
+With the ideal order 3, 2, 1, 0:
+
+$$\text{IDCG} = 3 + 1.262 + 0.5 + 0 = 4.762$$
+
+$$\text{nDCG} = 3.054 / 4.762 = 0.641$$
+
+The best document sitting at rank 4 costs the most.
 
 </details>
 
 ### P4. Memory sizing
 
-20M vectors, 1024 dimensions. Compute the size in float32, with PQ at m = 128 and 8 bits per code, and the layer-0 link memory of an HNSW graph with M = 32 (64 links of 4 bytes per node). Which is the dominant cost in the HNSW-over-float32 design?
+20M vectors, 1024 dimensions. Compute the size in float32, with PQ at $m = 128$ and 8 bits per code, and the layer-0 link memory of an HNSW graph with $M = 32$ (64 links of 4 bytes per node). Which is the dominant cost in the HNSW-over-float32 design?
 
 <details><summary>Answer</summary>
 
-Float32 vectors: 20M x 4,096 B = 81.9 GB. PQ codes: 20M x 128 B = 2.56 GB. HNSW links: 20M x 64 x 4 B = 5.12 GB. For HNSW over raw float32 the vectors dominate (81.9 GB versus 5.1 GB of links). For HNSW over PQ codes the links (5.1 GB) are larger than the codes (2.6 GB), so graph overhead becomes the dominant term. Add rescoring storage if you keep the originals.
+Float32 vectors: $20\text{M} \times 4{,}096\ \text{B} = 81.9\ \text{GB}$. PQ codes: $20\text{M} \times 128\ \text{B} = 2.56\ \text{GB}$. HNSW links: $20\text{M} \times 64 \times 4\ \text{B} = 5.12\ \text{GB}$. For HNSW over raw float32 the vectors dominate (81.9 GB versus 5.1 GB of links). For HNSW over PQ codes the links (5.1 GB) are larger than the codes (2.6 GB), so graph overhead becomes the dominant term. Add rescoring storage if you keep the originals.
 
 </details>
 
 ### P5. Choosing nlist
 
-N = 64M vectors and you plan nprobe = 32. What nlist minimises distance computations per query, what is the cost, and what is the speedup over brute force? Name one reason you might choose a different nlist.
+$N = 64\text{M}$ vectors and you plan $\text{nprobe} = 32$. What nlist minimises distance computations per query, what is the cost, and what is the speedup over brute force? Name one reason you might choose a different nlist.
 
 <details><summary>Answer</summary>
 
-nlist = sqrt(32 x 64,000,000) = 45,255. Cost = 2 x 45,255 = 90,510 distance computations, about 707x fewer than 64M. Reasons to deviate: very large nlist makes centroid training and imbalance harder, and the centroid-scan term is not free in practice (it can itself use an HNSW index). The recall you need at that nprobe is the real constraint, so check it against exact search.
+$$\text{nlist} = \sqrt{32 \times 64{,}000{,}000} = 45{,}255$$
+
+$$\text{cost} = 2 \times 45{,}255 = 90{,}510 \text{ distance computations}$$
+
+That is about $707\times$ fewer than 64M. Reasons to deviate: very large nlist makes centroid training and imbalance harder, and the centroid-scan term is not free in practice (it can itself use an HNSW index). The recall you need at that nprobe is the real constraint, so check it against exact search.
 
 </details>
 
@@ -85,7 +103,7 @@ A tenant filter passes 0.5% of vectors. You need 10 results. How large must the 
 
 <details><summary>Answer</summary>
 
-Expected survivors = k' x 0.005, so k' = 2,000 for 10 survivors on average, and more for a safe margin because the count is random. At 0.05% you need ~20,000 candidates, which wipes out the latency benefit of ANN. This is why selective filters need pre-filtering (brute force over the filtered set when it is small) or filter-aware traversal.
+$\text{expected survivors} = k' \times 0.005$, so $k' = 2{,}000$ for 10 survivors on average, and more for a safe margin because the count is random. At 0.05% you need ~20,000 candidates, which wipes out the latency benefit of ANN. This is why selective filters need pre-filtering (brute force over the filtered set when it is small) or filter-aware traversal.
 
 </details>
 
@@ -95,7 +113,7 @@ Chunks are 300 tokens with 60 tokens of overlap. Evidence is an 80-token span at
 
 <details><summary>Answer</summary>
 
-Stride = 240, so P = (300 - 80) / 240 = 0.917. Guaranteed containment needs overlap >= 80 tokens (stride <= 220), which raises the chunk count by 300/220 = 1.36x versus 300/240 = 1.25x at 60 tokens overlap.
+Stride $= 240$, so $P = (300 - 80) / 240 = 0.917$. Guaranteed containment needs overlap $\ge 80$ tokens (stride $\le 220$), which raises the chunk count by $300/220 = 1.36\times$ versus $300/240 = 1.25\times$ at 60 tokens overlap.
 
 </details>
 
@@ -130,6 +148,6 @@ You change the chunk size. Recall@10 goes from 0.70 to 0.75 on 150 queries. Is i
 
 <details><summary>Answer</summary>
 
-One system's standard error at recall 0.7 over 150 queries is sqrt(0.7 x 0.3 / 150) = 0.037, a 95% interval of about +-0.073. A 5-point change is inside that range for independent samples. Because both systems ran on the same queries, a paired analysis is more powerful: count queries where the new system hit and the old missed versus the reverse, and bootstrap the difference. Add queries if it is still ambiguous.
+One system's standard error at recall 0.7 over 150 queries is $\sqrt{0.7 \times 0.3 / 150} = 0.037$, a 95% interval of about $\pm 0.073$. A 5-point change is inside that range for independent samples. Because both systems ran on the same queries, a paired analysis is more powerful: count queries where the new system hit and the old missed versus the reverse, and bootstrap the difference. Add queries if it is still ambiguous.
 
 </details>

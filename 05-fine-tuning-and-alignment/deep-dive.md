@@ -87,7 +87,7 @@ Real systems combine the levers. A common end state is RAG for facts plus a smal
 
 ### A cost model you can do on the back of an envelope
 
-Assume a classification-and-extraction feature currently uses a 2,000-token prompt (instructions plus few-shot examples) on a large hosted model, and 1,000,000 requests per month. Input tokens per month: 2,000 x 1,000,000 = 2 x 10^9. A fine-tuned small model might need only a 150-token prompt: 1.5 x 10^8 tokens, a 13x reduction in input tokens before you even count that a smaller model costs less per token. Illustrative arithmetic (prices are placeholders, replace them with your own): at a hypothetical $1.00 per million input tokens the first design spends $2,000 per month on input and the second $150, plus whatever you pay to host the small model. Break-even against training cost, data-labelling effort and maintenance is a spreadsheet exercise, and the answer flips with volume. At 10,000 requests per month, fine-tuning for cost reasons rarely pays back. At 100 million requests per month, not fine-tuning is the choice that needs justifying.
+Assume a classification-and-extraction feature currently uses a 2,000-token prompt (instructions plus few-shot examples) on a large hosted model, and 1,000,000 requests per month. Input tokens per month: $2{,}000 \times 1{,}000{,}000 = 2 \times 10^9$. A fine-tuned small model might need only a 150-token prompt: $1.5 \times 10^8$ tokens, a $13\times$ reduction in input tokens before you even count that a smaller model costs less per token. Illustrative arithmetic (prices are placeholders, replace them with your own): at a hypothetical \$1.00 per million input tokens the first design spends \$2,000 per month on input and the second \$150, plus whatever you pay to host the small model. Break-even against training cost, data-labelling effort and maintenance is a spreadsheet exercise, and the answer flips with volume. At 10,000 requests per month, fine-tuning for cost reasons rarely pays back. At 100 million requests per month, not fine-tuning is the choice that needs justifying.
 
 Costs that people forget:
 
@@ -126,19 +126,19 @@ Supervised fine-tuning (SFT) looks like ordinary language-model training, and th
 
 ### The objective
 
-For a training example with prompt tokens x and response tokens y, SFT minimises the negative log-likelihood of the response given the prompt:
+For a training example with prompt tokens $x$ and response tokens $y$, SFT minimises the negative log-likelihood of the response given the prompt:
 
-```
-L = - (1 / |y|) * sum_{t in response} log p_theta(y_t | x, y_<t)
+```math
+L = -\frac{1}{\lvert y \rvert} \sum_{t \in \text{response}} \log p_\theta(y_t \mid x, y_{\lt t})
 ```
 
-The sum runs only over response positions. The prompt is still in the input, because the model needs it as context. It just carries no loss. Implementation: build `labels = input_ids.copy()`, set prompt positions to `-100` (the index PyTorch's `cross_entropy` ignores), and shift by one so position t predicts token t+1.
+The sum runs only over response positions. The prompt is still in the input, because the model needs it as context. It just carries no loss. Implementation: build `labels = input_ids.copy()`, set prompt positions to `-100` (the index PyTorch's `cross_entropy` ignores), and shift by one so position $t$ predicts token $t+1$.
 
 ### Chat templates
 
 A chat model is trained on text where roles are marked by special tokens. A ChatML-style rendering looks like:
 
-```
+```text
 <|im_start|>system
 You are a helpful assistant.<|im_end|>
 <|im_start|>user
@@ -157,15 +157,15 @@ Different model families use different markup (header tokens, `[INST]` blocks, B
 
 Worked example. Tokens (ids invented): prompt `[5, 6, 7]`, response `[8, 9]`, EOS `2`.
 
-```
+```text
 position:   0   1   2   3   4   5
 input_ids:  5   6   7   8   9   2
 labels:    -100 -100 -100 8   9   2
 ```
 
-After the next-token shift, the model's output at position t is compared with `labels[t+1]`:
+After the next-token shift, the model's output at position $t$ is compared with `labels[t+1]`:
 
-```
+```text
 position of logits:   0     1     2    3   4   (5 predicts nothing)
 target:             -100  -100    8    9   2
 ```
@@ -184,14 +184,14 @@ Multi-turn conversations: train on **every assistant turn** and mask user, syste
 
 Suppose a batch holds two examples with 10 and 990 response tokens, and per-token losses average 1.0 and 3.0.
 
-- **Mean of per-example means**: (1.0 + 3.0) / 2 = 2.0. Each example gets equal weight, so a token in the short example has 99x the weight of a token in the long one.
-- **Token-level mean**: (10 x 1.0 + 990 x 3.0) / 1000 = 2.98. Every token counts equally.
+- **Mean of per-example means**: $(1.0 + 3.0) / 2 = 2.0$. Each example gets equal weight, so a token in the short example has $99\times$ the weight of a token in the long one.
+- **Token-level mean**: $(10 \times 1.0 + 990 \times 3.0) / 1000 = 2.98$. Every token counts equally.
 
 Neither is wrong, but you must know which one you have. A related trap arises with **gradient accumulation**: averaging each micro-batch's mean loss weights micro-batches equally even when they contain different numbers of unmasked tokens. The correct token-level result divides the summed loss by the total number of unmasked tokens across all accumulation steps. Frameworks had to fix exactly this in 2024, and a team that logs loss from a custom loop can reproduce the bug. [Exercise 1](exercises/ex01_sft_masking_packing.py) has you compute both weightings.
 
 ### Packing
 
-Padding every example to the longest in its batch wastes compute. Eight examples with lengths 120, 300, 80, 640, 200, 150, 900 and 410 total 2,800 tokens. Padded to 900 they occupy 8 x 900 = 7,200 slots, so 38.9% of the compute is real tokens. Packed into a 4,096-token row, the same examples occupy one row at 68.4% (and exactly fit a shorter row, which is how you reach 90%+ in practice).
+Padding every example to the longest in its batch wastes compute. Eight examples with lengths 120, 300, 80, 640, 200, 150, 900 and 410 total 2,800 tokens. Padded to 900 they occupy $8 \times 900 = 7{,}200$ slots, so 38.9% of the compute is real tokens. Packed into a 4,096-token row, the same examples occupy one row at 68.4% (and exactly fit a shorter row, which is how you reach 90%+ in practice).
 
 Packing concatenates several examples in one row. Three details keep it correct:
 
@@ -217,7 +217,7 @@ Token 3 (the first token of example 2) attends only to itself. Token 5 (padding)
 
 | Knob | Full FT | LoRA | Notes |
 |---|---|---|---|
-| Learning rate | 1e-5 to 5e-5 | 1e-4 to 2e-4 | Too high is the most common cause of forgetting |
+| Learning rate | $10^{-5}$ to $5 \times 10^{-5}$ | $10^{-4}$ to $2 \times 10^{-4}$ | Too high is the most common cause of forgetting |
 | Epochs | 1-3 | 1-5 | Watch eval loss, not train loss |
 | Warmup | ~3% of steps | ~3% | Protects the first steps |
 | Schedule | cosine or linear decay | same | |
@@ -244,7 +244,7 @@ Data size shifts the optimum. Small datasets (hundreds of examples) tolerate mor
 
 1. There is no next token to predict at the last position. At a packed boundary, the "next token" belongs to an unrelated example, so training on it teaches the model a fake dependency. The target there must be ignored.
 2. Whether the end-of-turn token is present in the labels (not masked, not truncated) and whether inference stops on the same token the template defines.
-3. The per-example mean up-weights short answers. A token in the 10-token answer has 99x the weight of a token in the 990-token answer.
+3. The per-example mean up-weights short answers. A token in the 10-token answer has $99\times$ the weight of a token in the 990-token answer.
 4. One forward pass produces predictions for all positions, so every assistant turn's loss is computed at once, with earlier turns serving as context. Splitting it into one example per turn repeats the shared prefix many times.
 
 </details>
@@ -270,58 +270,58 @@ Standard mixed-precision training with Adam keeps, for every trainable parameter
 | Adam second moment v | fp32 | 4 |
 | **Total** | | **16** |
 
-The fp32 master copy exists because bf16 has only ~8 bits of mantissa: a learning-rate-sized update of 1e-5 added to a weight of magnitude 0.02 falls below bf16's resolution and rounds away, so updates accumulate in fp32 and are then cast down.
+The fp32 master copy exists because bf16 has only ~8 bits of mantissa: a learning-rate-sized update of $10^{-5}$ added to a weight of magnitude $0.02$ falls below bf16's resolution and rounds away, so updates accumulate in fp32 and are then cast down.
 
-Worked numbers (decimal GB, 1 GB = 10^9 bytes):
+Worked numbers (decimal GB, $1\ \text{GB} = 10^9$ bytes):
 
 | Model | Parameters | Full fine-tune (16 B) |
 |---|---|---|
-| 7B | 7 x 10^9 | 112 GB |
-| 13B | 13 x 10^9 | 208 GB |
-| 70B | 70 x 10^9 | 1,120 GB |
+| 7B | $7 \times 10^9$ | 112 GB |
+| 13B | $13 \times 10^9$ | 208 GB |
+| 70B | $70 \times 10^9$ | 1,120 GB |
 
 So a 7B model cannot be fully fine-tuned on a single 80 GB GPU with plain Adam, before counting activations. Levers:
 
-- **8-bit optimisers** quantise m and v to 1 byte each, cutting 8 B to ~2 B per parameter: 7B drops from 112 to 70 GB.
-- **ZeRO / FSDP** shard optimiser states (ZeRO-1), gradients (ZeRO-2) and parameters (ZeRO-3) across N GPUs. At ZeRO-3 the per-GPU cost is about 16 B x params / N, plus communication. 112 GB across 8 GPUs is 14 GB each.
+- **8-bit optimisers** quantise $m$ and $v$ to 1 byte each, cutting 8 B to ~2 B per parameter: 7B drops from 112 to 70 GB.
+- **ZeRO / FSDP** shard optimiser states (ZeRO-1), gradients (ZeRO-2) and parameters (ZeRO-3) across $N$ GPUs. At ZeRO-3 the per-GPU cost is about $16\ \text{B} \times \text{params} / N$, plus communication. 112 GB across 8 GPUs is 14 GB each.
 - **Lower-precision master weights** or pure-bf16 training, at some stability risk.
 - **PEFT** (Parts 4 and 5): no grads, master copies or optimiser states for frozen weights.
 
 ### Activations
 
-Activations are the intermediate tensors saved in the forward pass for use in backward. Unlike the 16 B/parameter terms, they scale with batch size and sequence length. A rough rule for a transformer layer in bf16 with fused attention (no sequence-squared term) is about 34 x s x b x h bytes per layer, for sequence length s, batch b and hidden size h. For a 7B-class model (h = 4096, 32 layers) at b = 1 and s = 4,096:
+Activations are the intermediate tensors saved in the forward pass for use in backward. Unlike the 16 B/parameter terms, they scale with batch size and sequence length. A rough rule for a transformer layer in bf16 with fused attention (no sequence-squared term) is about $34 \cdot s \cdot b \cdot h$ bytes per layer, for sequence length $s$, batch $b$ and hidden size $h$. For a 7B-class model ($h = 4096$, 32 layers) at $b = 1$ and $s = 4{,}096$:
 
-```
-34 * 4096 * 1 * 4096 * 32 = 18.25 GB
+```math
+34 \times 4096 \times 1 \times 4096 \times 32\ \text{bytes} = 18.25\ \text{GB}
 ```
 
 That is 18 GB for a single 4k sequence. At batch 4 it is 73 GB. Activations, not weights, are why long-context fine-tuning runs out of memory even with LoRA.
 
-**Gradient checkpointing** stores only each layer's input (2 x s x b x h bytes per layer) and recomputes the rest during backward:
+**Gradient checkpointing** stores only each layer's input ($2 \cdot s \cdot b \cdot h$ bytes per layer) and recomputes the rest during backward:
 
-```
-(2 * 32 + 34) * 4096 * 4096 = 1.64 GB   (vs 18.25 GB)
+```math
+(2 \times 32 + 34) \times 4096 \times 4096\ \text{bytes} = 1.64\ \text{GB} \quad (\text{vs. } 18.25\ \text{GB})
 ```
 
 The price is one extra forward pass: about 30% more compute per step. It is almost always worth it when memory is the binding constraint.
 
-**Gradient accumulation** gives a large effective batch with a small micro-batch: run k micro-batches, sum the gradients, then step once. It costs time, not memory. (See the loss-normalisation warning in Part 2.)
+**Gradient accumulation** gives a large effective batch with a small micro-batch: run $k$ micro-batches, sum the gradients, then step once. It costs time, not memory. (See the loss-normalisation warning in Part 2.)
 
 ### Compute: the 6ND rule
 
-Training compute for a dense transformer is approximately 6 x N x D FLOPs for N parameters and D tokens (2ND for the forward pass, 4ND for backward). Fine-tuning 7B on 10 million tokens:
+Training compute for a dense transformer is approximately $6ND$ FLOPs for $N$ parameters and $D$ tokens ($2ND$ for the forward pass, $4ND$ for backward). Fine-tuning 7B on 10 million tokens:
 
-```
-6 * 7e9 * 1e7 = 4.2e17 FLOPs
+```math
+6 \times (7 \times 10^{9}) \times 10^{7} = 4.2 \times 10^{17}\ \text{FLOPs}
 ```
 
 On a GPU sustaining ~125 TFLOPs (roughly 40% utilisation of a ~312 TFLOPs bf16 peak):
 
-```
-4.2e17 / 1.25e14 = 3,360 s = ~56 minutes
+```math
+\frac{4.2 \times 10^{17}\ \text{FLOPs}}{1.25 \times 10^{14}\ \text{FLOP/s}} = 3{,}360\ \text{s} \approx 56\ \text{minutes}
 ```
 
-LoRA skips the weight-gradient matmuls of frozen layers (still needs activation gradients), so it costs roughly 4ND instead of 6ND, about a third less compute. In practice the wall-clock saving is smaller than the memory saving, and gradient checkpointing and dequantisation (QLoRA) add some of it back. This is why "LoRA is cheap" is true for memory and only moderately true for time. Treat these as order-of-magnitude figures.
+LoRA skips the weight-gradient matmuls of frozen layers (still needs activation gradients), so it costs roughly $4ND$ instead of $6ND$, about a third less compute. In practice the wall-clock saving is smaller than the memory saving, and gradient checkpointing and dequantisation (QLoRA) add some of it back. This is why "LoRA is cheap" is true for memory and only moderately true for time. Treat these as order-of-magnitude figures.
 
 ### A memory estimator, in code
 
@@ -355,7 +355,7 @@ print(lora_gb(7e9, 40e6))                  # 14.64
 <details><summary>Answer</summary>
 
 1. 2 (bf16 weights) + 2 (grads) + 4 (fp32 master) + 8 (Adam m and v). For a frozen weight you keep only the 2 B of weights (or less if quantised): no grads, no master, no optimiser states.
-2. (2 + 2 + 4 + 2) = 10 B per parameter. 13e9 x 10 = 130 GB.
+2. $(2 + 2 + 4 + 2) = 10$ B per parameter. $13 \times 10^9 \times 10\ \text{B} = 130$ GB.
 3. Small updates fall below bf16 resolution and round to nothing. fp32 accumulates them. The bf16 copy is then regenerated from the master.
 4. It stores fewer activations (roughly one tensor per layer instead of ~34 hidden-sized tensors) and recomputes them in backward. Memory for activations drops by about an order of magnitude and compute rises ~30%.
 
@@ -371,52 +371,58 @@ Full fine-tuning updates every weight, so every weight needs a gradient and opti
 
 ### The parameterisation
 
-For a frozen weight W (d_out x d_in), LoRA learns:
+For a frozen weight $W$ of shape $d_{\text{out}} \times d_{\text{in}}$, LoRA learns:
 
-```
-W' = W + (alpha / r) * B @ A        B: d_out x r,   A: r x d_in,   r << min(d_out, d_in)
-```
-
-The forward pass for input x (as a row vector or batch) is `y = x W^T + (alpha / r) * x A^T B^T`, computed as two thin matmuls, without ever forming BA.
-
-Initialisation: A gets a random (Kaiming-uniform or Gaussian) initialisation, and **B is zero**, so BA = 0 and the model starts exactly at the base model.
-
-Parameter count for one matrix: r x (d_in + d_out). For a single 4096 x 4096 projection with r = 16:
-
-```
-full:  4096 * 4096 = 16,777,216
-LoRA:  16 * (4096 + 4096) = 131,072   (0.78% of the matrix)
+```math
+W' = W + \frac{\alpha}{r} BA, \qquad B \in \mathbb{R}^{d_{\text{out}} \times r}, \quad A \in \mathbb{R}^{r \times d_{\text{in}}}, \quad r \ll \min(d_{\text{out}}, d_{\text{in}})
 ```
 
-Whole-model count for a Llama-style 7B (hidden 4096, FFN 11008, 32 layers, q/k/v/o and gate/up/down adapted) at r = 16:
+The forward pass for input $x$ (as a row vector or batch) is $y = xW^\top + \tfrac{\alpha}{r} x A^\top B^\top$, computed as two thin matmuls, without ever forming $BA$.
 
-```
-per layer: 4 attention matrices:  4 * 16 * 8192            =   524,288
-           3 MLP matrices:        3 * 16 * (4096 + 11008)  =   724,992
+Initialisation: $A$ gets a random (Kaiming-uniform or Gaussian) initialisation, and $B$ **is zero**, so $BA = 0$ and the model starts exactly at the base model.
+
+Parameter count for one matrix: $r(d_{\text{in}} + d_{\text{out}})$. For a single $4096 \times 4096$ projection with $r = 16$:
+
+```math
+\begin{aligned}
+\text{full: } & 4096 \times 4096 = 16{,}777{,}216 \\
+\text{LoRA: } & 16 \times (4096 + 4096) = 131{,}072 \quad (0.78\%\ \text{of the matrix})
+\end{aligned}
 ```
 
-Per layer: 524,288 + 724,992 = 1,249,280 (each MLP matrix has d_in + d_out = 15,104, so 16 x 15,104 = 241,664). Over 32 layers: **39,976,960**, about 40M parameters or 0.57% of 7B. For a 70B model (hidden 8192, FFN 28672, 80 layers, grouped-query attention with a 1024-wide K and V) the same recipe gives 207,093,760, about 207M or 0.30%. Adapter size grows with width and depth, but much more slowly than the base model.
+Whole-model count for a Llama-style 7B (hidden 4096, FFN 11008, 32 layers, q/k/v/o and gate/up/down adapted) at $r = 16$:
+
+```math
+\begin{aligned}
+\text{4 attention matrices per layer: } & 4 \times 16 \times 8192 = 524{,}288 \\
+\text{3 MLP matrices per layer: } & 3 \times 16 \times (4096 + 11008) = 724{,}992
+\end{aligned}
+```
+
+Per layer: $524{,}288 + 724{,}992 = 1{,}249{,}280$ (each MLP matrix has $d_{\text{in}} + d_{\text{out}} = 15{,}104$, so $16 \times 15{,}104 = 241{,}664$). Over 32 layers: **39,976,960**, about 40M parameters or 0.57% of 7B. For a 70B model (hidden 8192, FFN 28672, 80 layers, grouped-query attention with a 1024-wide K and V) the same recipe gives 207,093,760, about 207M or 0.30%. Adapter size grows with width and depth, but much more slowly than the base model.
 
 ### Why the gradient behaves the way it does
 
-Let s = alpha / r and let G = dLoss/dW' be the gradient with respect to the effective weight (the same tensor full fine-tuning would get). By the chain rule:
+Let $s = \alpha / r$ and let $G = \partial L / \partial W'$ be the gradient with respect to the effective weight (the same tensor full fine-tuning would get). By the chain rule:
 
+```math
+\begin{aligned}
+\frac{\partial L}{\partial B} &= s\, G A^\top && (d_{\text{out}} \times r) \\
+\frac{\partial L}{\partial A} &= s\, B^\top G && (r \times d_{\text{in}})
+\end{aligned}
 ```
-dLoss/dB = s * G @ A^T        (d_out x r)
-dLoss/dA = s * B^T @ G        (r x d_in)
-```
 
-At initialisation B = 0, so dLoss/dA = 0 and only B moves on the first step. After B becomes nonzero, A starts learning. Two consequences:
+At initialisation $B = 0$, so $\partial L / \partial A = 0$ and only $B$ moves on the first step. After $B$ becomes nonzero, $A$ starts learning. Two consequences:
 
-1. One gradient step changes W' by -lr x s^2 x (G A^T A + B B^T G): it projects the full gradient G onto the subspace spanned by the current A and B. The adapter learns the part of the full-fine-tuning gradient that lives in a rank-r subspace.
-2. A and B play asymmetric roles. B starts at zero and A is random, so A is initially a fixed random projection and B learns to read from it. This is the basis of **LoRA+**, which uses a larger learning rate for B than for A (ratios of ~16 are reported in the paper) to speed up convergence.
+1. One gradient step changes $W'$ by $-\text{lr} \cdot s^2 (G A^\top A + B B^\top G)$: it projects the full gradient $G$ onto the subspace spanned by the current $A$ and $B$. The adapter learns the part of the full-fine-tuning gradient that lives in a subspace of rank $r$.
+2. $A$ and $B$ play asymmetric roles. $B$ starts at zero and $A$ is random, so $A$ is initially a fixed random projection and $B$ learns to read from it. This is the basis of **LoRA+**, which uses a larger learning rate for $B$ than for $A$ (ratios of ~16 are reported in the paper) to speed up convergence.
 
 ### What r and alpha control
 
-- **Rank r** is the capacity: the maximum rank of the update. Tasks that need new surface behaviour (format, style, tone) work with r = 8-16. Tasks that must absorb more (a new coding language, long reasoning traces) benefit from r = 64 or higher, with diminishing returns. Information-theory intuition: a rank-r update to a d x d matrix has about 2dr degrees of freedom, versus d^2.
-- **Alpha** sets the scale s = alpha / r. Because the update is multiplied by s, alpha behaves like a learning-rate multiplier on the adapter: doubling alpha at fixed LR roughly doubles the effective step in function space. A common default is alpha = 2r (s = 2) or alpha = r (s = 1). The point of the 1/r in the formula is that, when you change r with alpha fixed, the update magnitude changes by a controlled factor so you do not retune the LR for every rank. Later work showed that 1/r over-damps high ranks, hence **rsLoRA** with alpha / sqrt(r).
+- **Rank** $r$ is the capacity: the maximum rank of the update. Tasks that need new surface behaviour (format, style, tone) work with $r = 8\text{-}16$. Tasks that must absorb more (a new coding language, long reasoning traces) benefit from $r = 64$ or higher, with diminishing returns. Information-theory intuition: an update of rank $r$ to a $d \times d$ matrix has about $2dr$ degrees of freedom, versus $d^2$.
+- **Alpha** ($\alpha$) sets the scale $s = \alpha / r$. Because the update is multiplied by $s$, $\alpha$ behaves like a learning-rate multiplier on the adapter: doubling $\alpha$ at fixed LR roughly doubles the effective step in function space. A common default is $\alpha = 2r$ ($s = 2$) or $\alpha = r$ ($s = 1$). The point of the $1/r$ in the formula is that, when you change $r$ with $\alpha$ fixed, the update magnitude changes by a controlled factor so you do not retune the LR for every rank. Later work showed that $1/r$ over-damps high ranks, hence **rsLoRA** with $\alpha / \sqrt{r}$.
 
-Worked example: (r = 8, alpha = 16) has s = 2. (r = 64, alpha = 16) has s = 0.25: eight times lower scale on a much larger adapter, and it will learn slowly at the same LR. With rsLoRA the scales are 5.66 and 2.0.
+Worked example: ($r = 8$, $\alpha = 16$) has $s = 2$. ($r = 64$, $\alpha = 16$) has $s = 0.25$: eight times lower scale on a much larger adapter, and it will learn slowly at the same LR. With rsLoRA the scales are $16/\sqrt{8} = 5.66$ and $16/\sqrt{64} = 2.0$.
 
 ### Which matrices to adapt
 
@@ -426,8 +432,8 @@ The original paper adapted only the attention query and value projections. Later
 
 Because the update is linear, you can fold it into the base weight once:
 
-```
-W_merged = W + (alpha / r) * B @ A
+```math
+W_{\text{merged}} = W + \frac{\alpha}{r} BA
 ```
 
 and serve a plain model with no inference overhead. Alternatively keep adapters separate. An unmerged adapter adds two extra thin matmuls per adapted layer (small FLOPs but extra kernel launches and memory traffic), which is why it is a minor but non-zero latency cost. Kept separate, one base model can serve many tasks or tenants, swapping adapters per request (multi-LoRA serving in vLLM and S-LoRA-style systems). That trade is the main architectural reason to prefer LoRA in production: ten tenants cost one base model plus ten small adapters, not ten model copies.
@@ -441,7 +447,7 @@ The findings worth knowing, stated at the level of confidence the evidence suppo
 - On instruction-style tasks with modest data, well-configured LoRA (all linear layers, enough rank, the right LR) comes close to full fine-tuning.
 - On tasks that require learning a lot of new content (continued pretraining style, hard code or math adaptation), full fine-tuning tends to win, and a gap can remain even at high rank.
 - LoRA tends to **forget less and learn less** than full fine-tuning (the "LoRA Learns Less and Forgets Less" study). That is a trade-off, not a free win.
-- LoRA's best learning rate is typically about 10x that of full fine-tuning, and it is more sensitive to the LR than to the rank.
+- LoRA's best learning rate is typically about $10\times$ that of full fine-tuning, and it is more sensitive to the LR than to the rank.
 
 ### DoRA and friends
 
@@ -457,16 +463,16 @@ The findings worth knowing, stated at the level of confidence the evidence suppo
 
 ### Check yourself
 
-1. Why does zero-initialising B (and not A) give "start at the base model" while still allowing learning?
-2. Compute the adapter parameter count for a 8192 x 28672 matrix at r = 32.
-3. Why does the 1/r in alpha / r exist, and what does rsLoRA change?
+1. Why does zero-initialising $B$ (and not $A$) give "start at the base model" while still allowing learning?
+2. Compute the adapter parameter count for a $8192 \times 28672$ matrix at $r = 32$.
+3. Why does the $1/r$ in $\alpha / r$ exist, and what does rsLoRA change?
 4. What is the serving benefit of not merging?
 
 <details><summary>Answer</summary>
 
-1. BA = 0 when B = 0, so W' = W initially. The gradient to B is s G A^T, which is nonzero because A is random, so B moves on step one, and A then receives gradient as B grows. If both were zero, both gradients would vanish and nothing would train.
-2. r x (d_in + d_out) = 32 x (8192 + 28672) = 32 x 36,864 = 1,179,648, versus 234,881,024 for the full matrix (0.50%).
-3. It keeps the update magnitude roughly comparable when you change r with alpha fixed, so the LR does not need retuning for each rank. It over-damps large ranks, so rsLoRA divides by sqrt(r), keeping learning stable and letting larger ranks use their capacity.
+1. $BA = 0$ when $B = 0$, so $W' = W$ initially. The gradient to $B$ is $s G A^\top$, which is nonzero because $A$ is random, so $B$ moves on step one, and $A$ then receives gradient as $B$ grows. If both were zero, both gradients would vanish and nothing would train.
+2. $r(d_{\text{in}} + d_{\text{out}}) = 32 \times (8192 + 28672) = 32 \times 36{,}864 = 1{,}179{,}648$, versus $234{,}881{,}024$ for the full matrix (0.50%).
+3. It keeps the update magnitude roughly comparable when you change $r$ with $\alpha$ fixed, so the LR does not need retuning for each rank. It over-damps large ranks, so rsLoRA divides by $\sqrt{r}$, keeping learning stable and letting larger ranks use their capacity.
 4. One resident base model serves many fine-tunes by swapping small adapters per request, rather than holding one full model copy per tenant or task.
 
 </details>
@@ -483,30 +489,32 @@ LoRA removes the 14 B/parameter of gradient and optimiser state, but the frozen 
 
 To quantise a tensor to 4 bits (16 levels) you need a map from real values to level indices. Quantising a whole tensor with one scale is fragile: one outlier sets the scale and squeezes everyone else into a few levels. So split the tensor into **blocks** (64 values in QLoRA), and give each block its own scale:
 
-```
-absmax_b   = max |w_i| over the block
-normalised = w_i / absmax_b                  # now in [-1, 1]
-code_i     = index of nearest level to normalised   # 4 bits
-dequant    = level[code_i] * absmax_b
+```math
+\begin{aligned}
+\text{absmax}_b &= \max_{i \in b} \lvert w_i \rvert \\
+\tilde w_i &= w_i / \text{absmax}_b && \text{(now in } [-1, 1]\text{)} \\
+c_i &= \operatorname*{arg\,min}_k \lvert \ell_k - \tilde w_i \rvert && \text{(index of the nearest level, 4 bits)} \\
+\hat w_i &= \ell_{c_i} \cdot \text{absmax}_b && \text{(dequantised value)}
+\end{aligned}
 ```
 
-Storage per weight: 4 bits for the code plus 32 bits / 64 = 0.5 bits for the fp32 absmax of its block = **4.5 bits**. A smaller block lowers error and raises overhead (block 16 would cost 6 bits).
+Here $\ell_k$ are the 16 levels of the code. Storage per weight: 4 bits for the code plus $32\ \text{bits} / 64 = 0.5$ bits for the fp32 absmax of its block = **4.5 bits**. A smaller block lowers error and raises overhead (block 16 would cost 6 bits).
 
 ### Why NF4 and not evenly spaced levels
 
 Trained network weights are roughly zero-mean and bell-shaped. After dividing by the block's absmax, most values sit near zero and few near plus or minus 1. Evenly spaced levels waste codes on the sparse tails. **NormalFloat-4 (NF4)** places its 16 levels at quantiles of a standard normal distribution so that, for normally distributed inputs, each level is used about equally often. That is an information-theoretically optimal 4-bit code *for that distribution*. Details of the QLoRA construction:
 
 - 8 levels from positive quantiles and 7 from negative ones, plus an exact **zero** (so padding and zero-valued weights are represented exactly). The asymmetry (8 versus 7) is what lets both 0 and the extremes plus and minus 1 exist in 16 codes.
-- Levels are normalised by their largest absolute value so they lie in [-1, 1].
+- Levels are normalised by their largest absolute value so they lie in $[-1, 1]$.
 
 The resulting NF4 levels, to four decimals:
 
-```
+```text
 -1.0000 -0.6962 -0.5251 -0.3949 -0.2844 -0.1848 -0.0910  0.0000
  0.0796  0.1609  0.2461  0.3379  0.4407  0.5626  0.7230  1.0000
 ```
 
-Notice the spacing: about 0.09 between levels near zero, about 0.28 between the outer two positive levels (0.7230 to 1.0). Evenly spaced 16-level codes would step 2/15 = 0.133 everywhere.
+Notice the spacing: about 0.09 between levels near zero, about 0.28 between the outer two positive levels (0.7230 to 1.0). Evenly spaced 16-level codes would step $2/15 = 0.133$ everywhere.
 
 Measured on 128,000 standard normal values with block size 64 (this is what [Exercise 6](exercises/ex06_nf4_quantization.py) reproduces, same seed):
 
@@ -519,19 +527,19 @@ That is about 17% lower error at the same storage. The gain is real but modest, 
 
 ### Block size and outliers
 
-Error falls as blocks shrink, because each block's absmax is closer to its values' typical scale. On the same Gaussian data the MSE ordering is block 16 < 64 < 256 < 1024. The cost is storage: bits per weight are 4 + 32/block, so block 16 costs 6.0 bits and block 1024 costs 4.03.
+Error falls as blocks shrink, because each block's absmax is closer to its values' typical scale. On the same Gaussian data the MSE ordering is block $16 \lt 64 \lt 256 \lt 1024$. The cost is storage: bits per weight are $4 + 32/\text{block}$, so block 16 costs 6.0 bits and block 1024 costs 4.03.
 
-Outliers are the failure mode of absmax. Put a single value of 50 in a block of N(0,1) weights and its absmax is 50, so every other weight in that block is divided by 50 and rounds to the zero level whenever its magnitude is below about 2 (half the first level 0.0796 times 50), and to +-4 otherwise: the block's ordinary weights collapse onto two or three values. Other blocks are unaffected, which is exactly why blockwise scaling helps. LLM weight matrices and, much more so, activations contain outlier channels, which is why weight-only 4-bit quantisation works well, and quantising activations needs extra techniques.
+Outliers are the failure mode of absmax. Put a single value of 50 in a block of $\mathcal{N}(0, 1)$ weights and its absmax is 50, so every other weight in that block is divided by 50 and rounds to the zero level whenever its magnitude is below about 2 (half the first level $0.0796$ times 50), and to about $+4.0$ or $-4.6$ otherwise ($0.0796 \times 50$ and $-0.0910 \times 50$): the block's ordinary weights collapse onto two or three values. Other blocks are unaffected, which is exactly why blockwise scaling helps. LLM weight matrices and, much more so, activations contain outlier channels, which is why weight-only 4-bit quantisation works well, and quantising activations needs extra techniques.
 
 ### Double quantisation
 
 The 32-bit absmax per block of 64 costs 0.5 bits per weight. QLoRA quantises those constants again: take the absmax values of 256 blocks, quantise them to 8 bits with their own fp32 scale. Cost:
 
-```
-4 + 8/64 + 32/(64*256) = 4 + 0.125 + 0.00195 = 4.127 bits per weight
+```math
+4 + \frac{8}{64} + \frac{32}{64 \times 256} = 4 + 0.125 + 0.00195 = 4.127\ \text{bits per weight}
 ```
 
-A saving of 0.373 bits per weight, about 0.37 bits x 65e9 / 8 = 3 GB for a 65B model. It is a small, free-ish gain.
+A saving of 0.373 bits per weight, about $0.37 \times 65 \times 10^9 / 8 \approx 3$ GB for a 65B model. It is a small, free-ish gain.
 
 ### Paged optimisers
 
@@ -542,10 +550,10 @@ Long sequences or a rare large batch can spike memory briefly (gradient checkpoi
 | | 7B | 70B |
 |---|---|---|
 | Full fine-tune, Adam, mixed precision | 112 GB | 1,120 GB |
-| LoRA r=16, bf16 base | 14 + 0.64 = 14.6 GB | 140 + 3.3 = 143.3 GB |
-| QLoRA r=16, NF4 + double quant | 3.61 + 0.64 = 4.25 GB | 36.1 + 3.3 = 39.4 GB |
+| LoRA $r = 16$, bf16 base | $14 + 0.64 = 14.6$ GB | $140 + 3.3 = 143.3$ GB |
+| QLoRA $r = 16$, NF4 + double quant | $3.61 + 0.64 = 4.25$ GB | $36.1 + 3.3 = 39.4$ GB |
 
-(The adapter state costs 16 B x 40M = 0.64 GB for 7B and 16 B x 207M = 3.3 GB for 70B.) All exclude activations. 39.4 GB for 70B leaves under 9 GB on a 48 GB card for activations, which is why QLoRA 70B on one 48 GB GPU needs a short sequence, a small micro-batch and gradient checkpointing.
+(The adapter state costs $16\ \text{B} \times 40\text{M} = 0.64$ GB for 7B and $16\ \text{B} \times 207\text{M} = 3.3$ GB for 70B.) All exclude activations. 39.4 GB for 70B leaves under 9 GB on a 48 GB card for activations, which is why QLoRA 70B on one 48 GB GPU needs a short sequence, a small micro-batch and gradient checkpointing.
 
 ### What QLoRA gives up
 
@@ -563,14 +571,13 @@ Long sequences or a rare large batch can spike memory briefly (gradient checkpoi
 <details><summary>Answer</summary>
 
 1. An outlier only damages the block it lives in. With one global scale it would compress every weight in the tensor into a few levels.
-2. 16 codes are split asymmetrically: 8 positive levels, 7 negative levels and one zero. That layout includes both +1 and -1 as exact endpoints (after normalising by the largest magnitude) and represents zero weights exactly.
-3. Without: 4 + 32/128 = 4.25 bits. With: 4 + 8/128 + 32/(128 x 256) = 4 + 0.0625 + 0.00098 = 4.0635 bits.
+2. 16 codes are split asymmetrically: 8 positive levels, 7 negative levels and one zero. That layout includes both $+1$ and $-1$ as exact endpoints (after normalising by the largest magnitude) and represents zero weights exactly.
+3. Without: $4 + 32/128 = 4.25$ bits. With: $4 + \tfrac{8}{128} + \tfrac{32}{128 \times 256} = 4 + 0.0625 + 0.00098 = 4.0635$ bits.
 4. They fix transient memory spikes by paging optimiser state to CPU memory, turning an out-of-memory error into a slowdown. They do not lower steady-state memory use.
 
 </details>
 
 ---
-
 
 ## Part 6 - Data curation, synthetic data and distillation
 
@@ -605,7 +612,7 @@ Using a stronger model to generate or rewrite training data is now the default f
 
 - **Self-Instruct style**: seed with a few hundred hand-written tasks, have a model generate new instructions and answers, filter and deduplicate.
 - **Distillation from a teacher**: prompt a strong model on your real inputs, keep the answers as targets (black-box distillation).
-- **Rejection sampling**: generate N candidates per prompt, keep only those that pass a verifier (unit tests, an answer checker, a judge threshold). The model then trains on its own filtered outputs, which is a simple form of RL.
+- **Rejection sampling**: generate $N$ candidates per prompt, keep only those that pass a verifier (unit tests, an answer checker, a judge threshold). The model then trains on its own filtered outputs, which is a simple form of RL.
 - **Rewriting**: take human answers and have a model fix style, add reasoning or normalise the format.
 
 Failure modes:
@@ -622,20 +629,22 @@ Failure modes:
 
 Black-box distillation (above) only sees the teacher's sampled text. **Logit distillation** trains the student to match the teacher's full token distribution at each position, which carries far more information per example: the relative probabilities of wrong answers ("dark knowledge").
 
-Hinton's formulation uses temperature T to soften the distributions. Teacher logits [4, 2, 0]:
+Hinton's formulation uses temperature $T$ to soften the distributions. Teacher logits $z = [4, 2, 0]$:
 
-```
-T = 1: softmax = [0.867, 0.117, 0.016]
-T = 4: softmax = [0.506, 0.307, 0.186]
-```
-
-At T = 1 the teacher is almost a one-hot label. At T = 4 the relative ordering and spacing of the wrong answers is visible, and the student can learn from it. The loss is:
-
-```
-L = alpha * CE(student, hard label)  +  (1 - alpha) * T^2 * KL(teacher_T || student_T)
+```math
+\begin{aligned}
+T = 1: &\quad \operatorname{softmax}(z / T) = [0.867,\ 0.117,\ 0.016] \\
+T = 4: &\quad \operatorname{softmax}(z / T) = [0.506,\ 0.307,\ 0.186]
+\end{aligned}
 ```
 
-The T^2 factor keeps gradient magnitudes comparable across temperatures. Requirements: you need the teacher's logits (so, open weights or your own model) and a shared tokenizer, or an alignment trick when tokenizers differ. Reasoning-model distillation in the DeepSeek-R1 release, by contrast, was plain SFT on teacher-generated reasoning traces (black-box style) and still transferred substantial reasoning ability to small models, which is a practical datapoint for choosing the cheap route first.
+At $T = 1$ the teacher is almost a one-hot label. At $T = 4$ the relative ordering and spacing of the wrong answers is visible, and the student can learn from it. The loss is:
+
+```math
+L = \alpha \cdot \text{CE}(\text{student}, \text{hard label}) + (1 - \alpha)\, T^2 \cdot \mathrm{KL}\big(p^{\text{teacher}}_T \,\Vert\, p^{\text{student}}_T\big)
+```
+
+The $T^2$ factor keeps gradient magnitudes comparable across temperatures. Requirements: you need the teacher's logits (so, open weights or your own model) and a shared tokenizer, or an alignment trick when tokenizers differ. Reasoning-model distillation in the DeepSeek-R1 release, by contrast, was plain SFT on teacher-generated reasoning traces (black-box style) and still transferred substantial reasoning ability to small models, which is a practical datapoint for choosing the cheap route first.
 
 ### Check yourself
 
@@ -647,8 +656,8 @@ The T^2 factor keeps gradient magnitudes comparable across temperatures. Require
 <details><summary>Answer</summary>
 
 1. If near-duplicates sit on both sides of the train and test split, the model has effectively seen the test items and the metric measures memorisation. Duplicates also overweight the repeated pattern during training.
-2. You sample several candidates per prompt and keep only those that pass a checker or judge. It is only as good as the checker: a weak verifier lets wrong or hacky answers through and you train the model to produce them with higher confidence. It also costs N times the generation compute.
-3. Softening the teacher distribution exposes the relative probabilities of incorrect tokens, which are the extra information beyond the hard label. At T = 1 a confident teacher looks like a one-hot label.
+2. You sample several candidates per prompt and keep only those that pass a checker or judge. It is only as good as the checker: a weak verifier lets wrong or hacky answers through and you train the model to produce them with higher confidence. It also costs $N$ times the generation compute.
+3. Softening the teacher distribution exposes the relative probabilities of incorrect tokens, which are the extra information beyond the hard label. At $T = 1$ a confident teacher looks like a one-hot label.
 4. Any two of: mode collapse to the teacher's style, copying teacher errors, benchmark contamination inherited from the teacher, and terms-of-service restrictions on training on its outputs.
 
 </details>
@@ -679,26 +688,26 @@ The policy starts as an SFT model. This matters twice: it gives reasonable outpu
 
 ### Stage 2: the reward model and the Bradley-Terry loss
 
-Collect prompts x, sample two or more responses per prompt, and have annotators pick the better. We want a scalar reward r(x, y). The **Bradley-Terry model** says the probability that y_w beats y_l is:
+Collect prompts $x$, sample two or more responses per prompt, and have annotators pick the better. We want a scalar reward $r(x, y)$. The **Bradley-Terry model** says the probability that $y_w$ beats $y_l$ is, with $\sigma$ the logistic sigmoid:
 
-```
-P(y_w > y_l | x) = sigmoid( r(x, y_w) - r(x, y_l) )
+```math
+P(y_w \succ y_l \mid x) = \sigma\big(r(x, y_w) - r(x, y_l)\big)
 ```
 
-Only the *difference* of scores matters. Fit r by maximum likelihood over the preference dataset, which gives the pairwise logistic loss:
+Only the *difference* of scores matters. Fit $r$ by maximum likelihood over the preference dataset, which gives the pairwise logistic loss:
 
-```
-L_RM = - E[ log sigmoid( r(x, y_w) - r(x, y_l) ) ]
+```math
+L_{\text{RM}} = -\mathbb{E}_{(x, y_w, y_l)}\Big[\log \sigma\big(r(x, y_w) - r(x, y_l)\big)\Big]
 ```
 
 Practical facts:
 
 - The reward model is usually the SFT model (or a similar-size model) with the LM head replaced by a scalar head reading the final token's hidden state.
-- Gradient: dL/dr_w = -sigmoid(-d), dL/dr_l = +sigmoid(-d), with d = r_w - r_l. A confidently correct pair (d large) has almost no gradient. A confidently wrong pair has a gradient of magnitude near 1. At d = 0 each side gets 0.5.
+- Gradient: $\partial L / \partial r_w = -\sigma(-d)$ and $\partial L / \partial r_l = +\sigma(-d)$, with $d = r_w - r_l$. A confidently correct pair ($d$ large) has almost no gradient. A confidently wrong pair has a gradient of magnitude near 1. At $d = 0$ each side gets 0.5.
 - Calibration reading: a gap of 1.0 means a modelled 73% preference, a gap of 2.0 means 88%, a gap of 3.0 means 95%. Check that the reward gaps your model produces are consistent with actual annotator agreement on held-out pairs.
 - Human preference labels are noisy: annotators on the same pair often agree only around 70-75% of the time in published work (approximate). A reward model's held-out accuracy of 65-75% is normal, and the ceiling is the label noise.
 - Reward models overfit fast, typically within one epoch.
-- Only differences within one prompt are identifiable. Adding any function c(x) to r leaves the loss unchanged.
+- Only differences within one prompt are identifiable. Adding any function $c(x)$ to $r$ leaves the loss unchanged.
 
 [Exercise 3](exercises/ex03_bradley_terry_reward_model.py) trains a linear Bradley-Terry model and shows why separable data makes the weights grow without bound unless you regularise, a miniature of reward model over-fitting.
 
@@ -706,24 +715,26 @@ The same math ranks chess players (Elo) and LLMs in arena-style leaderboards: fi
 
 ### Stage 3: policy optimisation with a KL leash
 
-The RL objective, for policy pi, reference pi_ref and reward model r:
+The RL objective, for policy $\pi$, reference $\pi_{\text{ref}}$ and reward model $r$:
 
-```
-maximise   E_{x ~ D, y ~ pi(.|x)} [ r(x, y) ]  -  beta * KL( pi(.|x) || pi_ref(.|x) )
+```math
+\max_{\pi}\ \mathbb{E}_{x \sim D}\Big[\mathbb{E}_{y \sim \pi(\cdot \mid x)}\big[r(x, y)\big] - \beta\, \mathrm{KL}\big(\pi(\cdot \mid x) \,\Vert\, \pi_{\text{ref}}(\cdot \mid x)\big)\Big]
 ```
 
-In implementation, the KL term is expanded per token and folded into the reward. For a response with tokens y_1..y_T, the reward at token t is:
+In implementation, the KL term is expanded per token and folded into the reward. For a response with tokens $y_1, \dots, y_T$, the reward at token $t$ is:
 
-```
-r_t = - beta * ( log pi(y_t | x, y_<t) - log pi_ref(y_t | x, y_<t) )      for t < T
-r_T = - beta * ( ... same ... ) + r_RM(x, y)                              at the last token
+```math
+\begin{aligned}
+r_t &= -\beta \big(\log \pi(y_t \mid x, y_{\lt t}) - \log \pi_{\text{ref}}(y_t \mid x, y_{\lt t})\big) && \text{for } t \lt T \\
+r_T &= -\beta \big(\log \pi(y_T \mid x, y_{\lt T}) - \log \pi_{\text{ref}}(y_T \mid x, y_{\lt T})\big) + r_{\text{RM}}(x, y) && \text{at the last token}
+\end{aligned}
 ```
 
 The reward-model score arrives only at the last token, and the KL penalty is dense. Summing the per-token terms gives exactly the sequence-level log-ratio. [Exercise 7](exercises/ex07_kl_penalty_and_optimal_policy.py) implements this shaping.
 
-**Why the KL leash exists.** The reward model is a learned proxy trained on a finite sample of responses near the SFT distribution. Away from that distribution it extrapolates arbitrarily, and the policy is an optimiser that will find the extrapolation errors: unusual phrasing, long confident answers, flattery, repetition, sometimes gibberish that scores high. This is **reward hacking**, an instance of Goodhart's law. Studies of reward-model over-optimisation (Gao et al.) show the pattern: as the policy moves further from the reference (measured by KL), the proxy reward keeps rising while a held-out "gold" reward first rises and then falls. The KL penalty keeps the policy where the reward model is trustworthy. Beta trades reward gained against drift:
+**Why the KL leash exists.** The reward model is a learned proxy trained on a finite sample of responses near the SFT distribution. Away from that distribution it extrapolates arbitrarily, and the policy is an optimiser that will find the extrapolation errors: unusual phrasing, long confident answers, flattery, repetition, sometimes gibberish that scores high. This is **reward hacking**, an instance of Goodhart's law. Studies of reward-model over-optimisation (Gao et al.) show the pattern: as the policy moves further from the reference (measured by KL), the proxy reward keeps rising while a held-out "gold" reward first rises and then falls. The KL penalty keeps the policy where the reward model is trustworthy. Beta ($\beta$) trades reward gained against drift:
 
-| beta | Behaviour |
+| $\beta$ | Behaviour |
 |---|---|
 | Too small | Reward hacking, degenerate text, loss of diversity |
 | Reasonable (often ~0.01-0.1 in practice) | Gains in preference with controlled drift |
@@ -731,42 +742,48 @@ The reward-model score arrives only at the last token, and the KL penalty is den
 
 ### The KL estimators in practice
 
-Computing the exact KL over the vocabulary at every token is expensive, so implementations estimate it from the sampled tokens. With log_r = log pi_ref(y) - log pi(y) for y sampled from pi, three standard estimators of KL(pi || pi_ref) are:
+Computing the exact KL over the vocabulary at every token is expensive, so implementations estimate it from the sampled tokens. With the log-ratio $\ell = \log \pi_{\text{ref}}(y) - \log \pi(y)$ for $y$ sampled from $\pi$, three standard estimators of $\mathrm{KL}(\pi \thinspace\Vert\thinspace \pi_{\text{ref}})$ are:
 
-```
-k1 = -log_r                  unbiased, high variance, can be negative on a sample
-k2 = 0.5 * log_r^2           biased, low variance, always >= 0
-k3 = exp(log_r) - 1 - log_r  unbiased, low variance, always >= 0
+```math
+\begin{aligned}
+k_1 &= -\ell && \text{unbiased, high variance, can be negative on a sample} \\
+k_2 &= \tfrac{1}{2} \ell^2 && \text{biased, low variance, always} \ge 0 \\
+k_3 &= e^{\ell} - 1 - \ell && \text{unbiased, low variance, always} \ge 0
+\end{aligned}
 ```
 
-Worked example for one token where pi gives 0.5 and pi_ref gives 0.4: log_r = ln(0.8) = -0.2231. Then k1 = 0.2231, k2 = 0.0249, k3 = 0.0231. All three are positive here. In a batch, k1 values occasionally go negative (a token where pi gives less probability than pi_ref) and average out to the true KL. k3 is a control-variate version of k1: it adds exp(log_r) - 1, which has expectation zero under pi, and this makes every sample non-negative. That is why recent GRPO-style implementations use k3 for the KL term. The exercise verifies unbiasedness of k1 and k3 and the bias of k2 on a toy distribution.
+Worked example for one token where $\pi$ gives 0.5 and $\pi_{\text{ref}}$ gives 0.4: $\ell = \ln 0.8 = -0.2231$. Then $k_1 = 0.2231$, $k_2 = 0.0249$, $k_3 = 0.0231$. All three are positive here. In a batch, $k_1$ values occasionally go negative (a token where $\pi_{\text{ref}}$ gives more probability than $\pi$) and average out to the true KL. $k_3$ is a control-variate version of $k_1$: it adds $e^{\ell} - 1$, which has expectation zero under $\pi$, and this makes every sample non-negative. That is why recent GRPO-style implementations use $k_3$ for the KL term. The exercise verifies unbiasedness of $k_1$ and $k_3$ and the bias of $k_2$ on a toy distribution.
 
 ### PPO in one page
 
-The policy gradient update uses an **advantage** A_t, which is how much better token t's outcome was than expected. PPO adds two pieces:
+The policy gradient update uses an **advantage** $A_t$, which is how much better token $t$'s outcome was than expected. PPO adds two pieces:
 
-- A **value function** V (a critic network, usually the same size as the policy) that predicts return from each state, used to compute advantages via generalised advantage estimation:
+- A **value function** $V$ (a critic network, usually the same size as the policy) that predicts return from each state, used to compute advantages via generalised advantage estimation:
 
-```
-delta_t = r_t + gamma * V(s_{t+1}) - V(s_t)
-A_t     = sum_{l >= 0} (gamma * lambda)^l * delta_{t+l}
+```math
+\begin{aligned}
+\delta_t &= r_t + \gamma V(s_{t+1}) - V(s_t) \\
+A_t &= \sum_{l \ge 0} (\gamma \lambda)^l\, \delta_{t+l}
+\end{aligned}
 ```
 
 - A **clipped surrogate objective** that stops a single batch from moving the policy too far:
 
-```
-rho_t = pi_new(y_t | ...) / pi_old(y_t | ...)
-L = E[ min( rho_t * A_t,  clip(rho_t, 1 - eps, 1 + eps) * A_t ) ]
+```math
+\begin{aligned}
+\rho_t &= \frac{\pi_{\text{new}}(y_t \mid \dots)}{\pi_{\text{old}}(y_t \mid \dots)} \\
+L &= \mathbb{E}\Big[\min\big(\rho_t A_t,\ \operatorname{clip}(\rho_t, 1 - \epsilon, 1 + \epsilon)\, A_t\big)\Big]
+\end{aligned}
 ```
 
-Clipping is one-sided. With A > 0 and rho = 1.5, eps = 0.2, the objective uses 1.2 A (no incentive to push the ratio past 1.2). With A > 0 and rho = 0.5 it uses 0.5 A (the policy already moved the wrong way, so the full gradient remains). The mirrored cases apply for A < 0. [Exercise 5](exercises/ex05_grpo_advantages.py) checks all four regimes.
+Clipping is one-sided. With $A \gt 0$ and $\rho = 1.5$, $\epsilon = 0.2$, the objective uses $1.2A$ (no incentive to push the ratio past 1.2). With $A \gt 0$ and $\rho = 0.5$ it uses $0.5A$ (the policy already moved the wrong way, so the full gradient remains). The mirrored cases apply for $A \lt 0$. [Exercise 5](exercises/ex05_grpo_advantages.py) checks all four regimes.
 
 ### The cost of PPO-based RLHF
 
 Four models are live: the **policy** (trainable), the **critic** (trainable), the **reference** (frozen) and the **reward model** (frozen). For a 7B policy with a 7B critic, full fine-tuning both with Adam in mixed precision costs 112 GB each, plus 14 GB each for the frozen reference and reward model in bf16:
 
-```
-112 + 112 + 14 + 14 = 252 GB     (before activations and generation buffers)
+```math
+112 + 112 + 14 + 14 = 252\ \text{GB} \quad \text{(before activations and generation buffers)}
 ```
 
 On top of that, every step needs **generation** (sampling responses from the current policy), which is slow and memory-hungry (KV cache), and is why RLHF systems separate rollout workers from training workers. Also, PPO is notoriously sensitive: value-function quality, advantage normalisation, KL coefficient schedule and learning rate interact. A large share of the interest in DPO and GRPO is simply that they remove parts of this machine.
@@ -787,7 +804,7 @@ On top of that, every step needs **generation** (sampling responses from the cur
 
 <details><summary>Answer</summary>
 
-1. The gap is 1.5, so sigmoid(1.5) = 0.818.
+1. The gap is 1.5, so $\sigma(1.5) = 0.818$.
 2. It gives a dense per-token signal about how far each step drifts, which is easier for credit assignment, and the sum equals the sequence-level log-ratio, so the objective is unchanged. Only the reward-model score is sparse (last token).
 3. The reward model was trained on samples near the SFT distribution. A lightly tuned policy stays there. A heavily tuned policy samples out-of-distribution responses where the reward model extrapolates and can be exploited. Held-out gold reward drops while proxy reward keeps climbing.
 4. Policy 112 GB + critic 112 GB + frozen reference 14 GB + frozen reward model 14 GB = 252 GB, before activations.
@@ -804,65 +821,86 @@ The RLHF pipeline needs a reward model, an RL loop, a critic and online sampling
 
 ### Step 1: the optimum of the KL-regularised objective
 
-For one prompt x, maximise over policies pi:
+For one prompt $x$, maximise over policies $\pi$:
 
-```
-J(pi) = E_{y ~ pi}[ r(x, y) ] - beta * KL( pi || pi_ref )
-      = E_{y ~ pi}[ r(x, y) - beta * log( pi(y) / pi_ref(y) ) ]
+```math
+\begin{aligned}
+J(\pi) &= \mathbb{E}_{y \sim \pi}\big[r(x, y)\big] - \beta\, \mathrm{KL}(\pi \,\Vert\, \pi_{\text{ref}}) \\
+&= \mathbb{E}_{y \sim \pi}\Big[r(x, y) - \beta \log \frac{\pi(y)}{\pi_{\text{ref}}(y)}\Big]
+\end{aligned}
 ```
 
 The solution is the reference policy reweighted by exponentiated reward:
 
-```
-pi*(y | x) = (1 / Z(x)) * pi_ref(y | x) * exp( r(x, y) / beta ),
-Z(x) = sum_y pi_ref(y | x) * exp( r(x, y) / beta )
+```math
+\begin{aligned}
+\pi^\ast(y \mid x) &= \frac{1}{Z(x)}\, \pi_{\text{ref}}(y \mid x) \exp\big(r(x, y) / \beta\big) \\
+Z(x) &= \sum_{y} \pi_{\text{ref}}(y \mid x) \exp\big(r(x, y) / \beta\big)
+\end{aligned}
 ```
 
-Proof sketch: rewrite J as -beta * KL( pi || pi* ) + beta * log Z(x). The KL term is minimised (zero) at pi = pi*, so J is maximised there, and its maximum value is beta * log Z(x).
+Proof sketch: rewrite $J$ as
 
-A quick sanity check with numbers: pi_ref = [0.5, 0.3, 0.2], r = [0, 1, 2], beta = 1. Unnormalised: [0.5, 0.3 x 2.718, 0.2 x 7.389] = [0.5, 0.815, 1.478], Z = 2.793, pi* = [0.179, 0.292, 0.529]. The high-reward response gained probability from 0.2 to 0.529. With beta = 0.01 nearly all mass moves to the argmax. With beta = 10^6 pi* stays at the reference. [Exercise 7](exercises/ex07_kl_penalty_and_optimal_policy.py) checks all three.
+```math
+J(\pi) = -\beta\, \mathrm{KL}(\pi \,\Vert\, \pi^\ast) + \beta \log Z(x)
+```
+
+The KL term is minimised (zero) at $\pi = \pi^\ast$, so $J$ is maximised there, and its maximum value is $\beta \log Z(x)$.
+
+A quick sanity check with numbers: $\pi_{\text{ref}} = [0.5, 0.3, 0.2]$, $r = [0, 1, 2]$, $\beta = 1$.
+
+```math
+\begin{aligned}
+\text{unnormalised} &= [0.5,\ 0.3 \times 2.718,\ 0.2 \times 7.389] = [0.5,\ 0.815,\ 1.478] \\
+Z &= 2.793, \qquad \pi^\ast = [0.179,\ 0.292,\ 0.529]
+\end{aligned}
+```
+
+The high-reward response gained probability from 0.2 to 0.529. With $\beta = 0.01$ nearly all mass moves to the $\arg\max$. With $\beta = 10^6$, $\pi^\ast$ stays at the reference. [Exercise 7](exercises/ex07_kl_penalty_and_optimal_policy.py) checks all three.
 
 ### Step 2: invert the relationship
 
 Take logs and solve for the reward:
 
-```
-r(x, y) = beta * log( pi*(y | x) / pi_ref(y | x) ) + beta * log Z(x)
+```math
+r(x, y) = \beta \log \frac{\pi^\ast(y \mid x)}{\pi_{\text{ref}}(y \mid x)} + \beta \log Z(x)
 ```
 
-Any policy pi can be read as defining a reward this way. The troublesome term Z(x) depends only on the prompt, not on y.
+Any policy $\pi$ can be read as defining a reward this way. The troublesome term $Z(x)$ depends only on the prompt, not on $y$.
 
 ### Step 3: plug into Bradley-Terry
 
-Bradley-Terry depends only on r(x, y_w) - r(x, y_l), and Z(x) cancels:
+Bradley-Terry depends only on $r(x, y_w) - r(x, y_l)$, and $Z(x)$ cancels:
 
-```
-r_w - r_l = beta * log( pi(y_w) / pi_ref(y_w) ) - beta * log( pi(y_l) / pi_ref(y_l) )
+```math
+r_w - r_l = \beta \log \frac{\pi(y_w)}{\pi_{\text{ref}}(y_w)} - \beta \log \frac{\pi(y_l)}{\pi_{\text{ref}}(y_l)}
 ```
 
 So maximum-likelihood on preference pairs, with the reward parameterised by the policy, gives the **DPO loss**:
 
-```
-L_DPO = - E[ log sigmoid( beta * ( log(pi(y_w|x)/pi_ref(y_w|x)) - log(pi(y_l|x)/pi_ref(y_l|x)) ) ) ]
+```math
+L_{\text{DPO}} = -\mathbb{E}\left[\log \sigma\left(\beta \left(\log \frac{\pi(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \log \frac{\pi(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}\right)\right)\right]
 ```
 
-Define the **implicit reward** r_hat(y) = beta * log( pi(y|x) / pi_ref(y|x) ) and z = r_hat(y_w) - r_hat(y_l). Then L = -log sigmoid(z): a binary classifier over a difference of log-ratios. The policy is trained to be, in effect, its own reward model. No sampling, no critic, no separate reward model. The reference log-probs are constants you can precompute once. [Exercise 4](exercises/ex04_dpo_loss.py) implements the loss, its gradients and a tabular policy, and checks the implicit reward of the KL-optimal policy against the true reward differences.
+Define the **implicit reward** $\hat r(y) = \beta \log \tfrac{\pi(y \mid x)}{\pi_{\text{ref}}(y \mid x)}$ and $z = \hat r(y_w) - \hat r(y_l)$. Then $L = -\log \sigma(z)$: a binary classifier over a difference of log-ratios. The policy is trained to be, in effect, its own reward model. No sampling, no critic, no separate reward model. The reference log-probs are constants you can precompute once. [Exercise 4](exercises/ex04_dpo_loss.py) implements the loss, its gradients and a tabular policy, and checks the implicit reward of the KL-optimal policy against the true reward differences.
 
 ### Gradient: what the update actually does
 
-```
-grad L = - beta * sigmoid(-z) * ( grad log pi(y_w) - grad log pi(y_l) )
-```
-
-Raise the chosen log-prob, lower the rejected one, weighted by sigmoid(-z): how wrong the implicit reward currently is. Worked example: beta = 0.1, chosen policy log-prob -12 versus reference -14, rejected policy log-prob -20 versus reference -19.
-
-```
-r_hat(chosen)   = 0.1 * (-12 + 14) = +0.2
-r_hat(rejected) = 0.1 * (-20 + 19) = -0.1
-z = 0.3,  loss = -ln sigmoid(0.3) = 0.554,  weight = sigmoid(-0.3) = 0.426
+```math
+\nabla L = -\beta\, \sigma(-z) \big(\nabla \log \pi(y_w) - \nabla \log \pi(y_l)\big)
 ```
 
-At the start of training the policy equals the reference, so z = 0, the loss is ln 2 = 0.693 and the weight is 0.5. As a sanity check on a training run, the DPO loss should start at 0.693 and drift down, and reward accuracy (fraction of pairs with z > 0) should start at 50%.
+Raise the chosen log-prob, lower the rejected one, weighted by $\sigma(-z)$: how wrong the implicit reward currently is. Worked example: $\beta = 0.1$, chosen policy log-prob $-12$ versus reference $-14$, rejected policy log-prob $-20$ versus reference $-19$.
+
+```math
+\begin{aligned}
+\hat r(\text{chosen}) &= 0.1 \times (-12 + 14) = +0.2 \\
+\hat r(\text{rejected}) &= 0.1 \times (-20 + 19) = -0.1 \\
+z &= 0.3, \qquad \text{loss} = -\ln \sigma(0.3) = 0.554, \qquad \text{weight} = \sigma(-0.3) = 0.426
+\end{aligned}
+```
+
+At the start of training the policy equals the reference, so $z = 0$, the loss is $\ln 2 = 0.693$ and the weight is 0.5. As a sanity check on a training run, the DPO loss should start at 0.693 and drift down, and reward accuracy (fraction of pairs with $z \gt 0$) should start at 50%.
 
 ```python
 import numpy as np
@@ -877,7 +915,7 @@ print(dpo_loss(np.array([-12.0]), np.array([-20.0]),
 
 ### What beta means
 
-Beta is the same KL coefficient as in RLHF, now acting as an inverse temperature on the log-ratios. Small beta (0.01-0.05) lets the policy move far and fits the preference data aggressively. Large beta (0.3-0.5) keeps it close to the reference. A common default is 0.1. It is a hyperparameter to sweep against a held-out preference win rate and a general regression suite.
+Beta ($\beta$) is the same KL coefficient as in RLHF, now acting as an inverse temperature on the log-ratios. Small $\beta$ (0.01-0.05) lets the policy move far and fits the preference data aggressively. Large $\beta$ (0.3-0.5) keeps it close to the reference. A common default is 0.1. It is a hyperparameter to sweep against a held-out preference win rate and a general regression suite.
 
 ### Failure modes of DPO
 
@@ -891,10 +929,10 @@ Beta is the same KL coefficient as in RLHF, now acting as an inverse temperature
 
 | Method | Change | Fixes / trades |
 |---|---|---|
-| **IPO** | Replace the log-sigmoid with a squared loss pulling the log-ratio gap toward a fixed target 1/(2 beta) | A bounded objective: it cannot be reduced by pushing the margin to infinity, so it resists overfitting when preferences are near-deterministic |
+| **IPO** | Replace the log-sigmoid with a squared loss pulling the log-ratio gap toward a fixed target $1/(2\beta)$ | A bounded objective: it cannot be reduced by pushing the margin to infinity, so it resists overfitting when preferences are near-deterministic |
 | **KTO** | Use single responses labelled good or bad (not pairs), with a prospect-theory-inspired utility around a reference point | Works with thumbs-up and thumbs-down logs. Data is cheap, signal per example is weaker |
 | **ORPO** | Add an odds-ratio penalty on the rejected response to the SFT loss on the chosen one | One stage, no reference model. Less memory, less controlled drift |
-| **SimPO** | Use length-normalised average log-prob as the implicit reward, no reference model, plus a target margin | Reference-free and length-aware. Needs tuning of margin and beta |
+| **SimPO** | Use length-normalised average log-prob as the implicit reward, no reference model, plus a target margin | Reference-free and length-aware. Needs tuning of margin and $\beta$ |
 | **Online or iterative DPO** | Re-sample from the current policy and relabel each round | Closes much of the gap to RL by fixing distribution shift. Costs sampling and labelling |
 
 ### DPO versus PPO, honestly
@@ -904,16 +942,16 @@ DPO is simpler, cheaper and stable: classification loss, pairs on disk, two forw
 ### Check yourself
 
 1. Which term cancels in the DPO derivation, and why does that matter?
-2. At initialisation (pi = pi_ref) what are the DPO loss and gradient weight?
+2. At initialisation, when $\pi = \pi_{\text{ref}}$, what are the DPO loss and gradient weight?
 3. Why can DPO reduce the probability of the chosen response while the loss falls?
 4. What does IPO change and what problem does that target?
 
 <details><summary>Answer</summary>
 
-1. The partition function Z(x), which depends only on the prompt. It is intractable (a sum over all responses). It cancels because Bradley-Terry uses a difference of two rewards for the same prompt, which is what lets DPO avoid a reward model.
-2. z = 0, so the loss is ln 2 = 0.693 and the weight sigmoid(0) = 0.5, so the gradient on the chosen log-prob is -beta/2.
-3. The loss depends on the *difference* of the two log-ratios. If the rejected log-prob drops by more than the chosen drops, z grows and the loss falls even though the chosen response lost probability.
-4. It replaces the logistic loss with a squared error toward a finite target margin of 1/(2 beta), so near-deterministic preference labels cannot drive the margin to infinity, which reduces overfitting.
+1. The partition function $Z(x)$, which depends only on the prompt. It is intractable (a sum over all responses). It cancels because Bradley-Terry uses a difference of two rewards for the same prompt, which is what lets DPO avoid a reward model.
+2. $z = 0$, so the loss is $\ln 2 = 0.693$ and the weight $\sigma(0) = 0.5$, so the gradient on the chosen log-prob is $-\beta/2$.
+3. The loss depends on the *difference* of the two log-ratios. If the rejected log-prob drops by more than the chosen drops, $z$ grows and the loss falls even though the chosen response lost probability.
+4. It replaces the logistic loss with a squared error toward a finite target margin of $1/(2\beta)$, so near-deterministic preference labels cannot drive the margin to infinity, which reduces overfitting.
 
 </details>
 
@@ -937,30 +975,32 @@ Where it applies: mathematics, code with tests, formal proofs, constrained forma
 
 ### From PPO to GRPO
 
-PPO's critic exists to give a baseline: it estimates how good a state is so that the advantage A = return - V(s) has low variance. GRPO instead gets the baseline from **the other samples for the same prompt**. For each prompt x, sample a group of G responses from the current policy (old policy), score each with the reward function to get r_1..r_G, and compute:
+PPO's critic exists to give a baseline: it estimates how good a state is so that the advantage $A = \text{return} - V(s)$ has low variance. GRPO instead gets the baseline from **the other samples for the same prompt**. For each prompt $x$, sample a group of $G$ responses from the current policy (old policy), score each with the reward function to get $r_1, \dots, r_G$, and compute:
 
-```
-A_i = ( r_i - mean(r_1..r_G) ) / ( std(r_1..r_G) + eps )
+```math
+A_i = \frac{r_i - \operatorname{mean}(r_1, \dots, r_G)}{\operatorname{std}(r_1, \dots, r_G) + \epsilon}
 ```
 
-Every token in response i receives the same advantage A_i. There is no value network. The objective keeps PPO's clipped ratio and a KL term to the reference:
+Every token in response $i$ receives the same advantage $A_i$. There is no value network. The objective keeps PPO's clipped ratio and a KL term to the reference, where $o_i$ is response $i$ and $\lvert o_i \rvert$ its length in tokens:
 
-```
-J = E[ (1/G) sum_i (1/|o_i|) sum_t ( min( rho_{i,t} A_i, clip(rho_{i,t}, 1-eps, 1+eps) A_i ) - beta * KL_{i,t} ) ]
+```math
+J = \mathbb{E}\left[\frac{1}{G} \sum_{i=1}^{G} \frac{1}{\lvert o_i \rvert} \sum_{t=1}^{\lvert o_i \rvert} \Big(\min\big(\rho_{i,t} A_i,\ \operatorname{clip}(\rho_{i,t}, 1 - \epsilon, 1 + \epsilon)\, A_i\big) - \beta\, \mathrm{KL}_{i,t}\Big)\right]
 ```
 
 Worked example. Eight samples, three correct:
 
-```
-rewards = [1, 1, 1, 0, 0, 0, 0, 0]
-mean = 0.375, std = sqrt(0.375 * 0.625) = 0.484
-A(correct) = (1 - 0.375) / 0.484 = +1.291
-A(wrong)   = (0 - 0.375) / 0.484 = -0.775
+```math
+\begin{aligned}
+\text{rewards} &= [1, 1, 1, 0, 0, 0, 0, 0] \\
+\text{mean} &= 0.375, \qquad \text{std} = \sqrt{0.375 \times 0.625} = 0.484 \\
+A_{\text{correct}} &= (1 - 0.375) / 0.484 = +1.291 \\
+A_{\text{wrong}} &= (0 - 0.375) / 0.484 = -0.775
+\end{aligned}
 ```
 
-With one success in four samples (p = 0.25), std = 0.433, a correct sample gets +sqrt((1 - p)/p) = +1.732 and each wrong one gets -0.577. Rare successes receive big positive advantages, and the update pushes up the probability of whatever the successful path did. If all samples are right or all are wrong, std = 0, advantages are all zero and the prompt contributes nothing. [Exercise 5](exercises/ex05_grpo_advantages.py) implements these cases.
+With one success in four samples ($p = 0.25$), $\text{std} = 0.433$, a correct sample gets $+\sqrt{(1 - p)/p} = +1.732$ and each wrong one gets $-\sqrt{p/(1 - p)} = -0.577$. Rare successes receive big positive advantages, and the update pushes up the probability of whatever the successful path did. If all samples are right or all are wrong, $\text{std} = 0$, advantages are all zero and the prompt contributes nothing. [Exercise 5](exercises/ex05_grpo_advantages.py) implements these cases.
 
-Memory comparison with the PPO setup in Part 7: drop the 7B critic (112 GB), keep policy and reference, and keep a reward model only if the reward is learned. With a verifiable reward there is no reward model, so you hold the policy plus a frozen reference: 112 + 14 = 126 GB for 7B, versus 252 GB for PPO with a learned reward model. The cost moves to generation: G samples per prompt, typically 8 to 64.
+Memory comparison with the PPO setup in Part 7: drop the 7B critic (112 GB), keep policy and reference, and keep a reward model only if the reward is learned. With a verifiable reward there is no reward model, so you hold the policy plus a frozen reference: $112 + 14 = 126$ GB for 7B, versus 252 GB for PPO with a learned reward model. The cost moves to generation: $G$ samples per prompt, typically 8 to 64.
 
 ### Biases and the fixes
 
@@ -968,8 +1008,8 @@ GRPO is simple, and its normalisations have side effects that later variants add
 
 | Issue | Mechanism | Fix |
 |---|---|---|
-| **Std normalisation bias** | Dividing by std up-weights prompts with low reward variance (almost always right or almost always wrong) | Dr. GRPO drops the std division, using r_i - mean only |
-| **Length bias** | Averaging over tokens per sample (1/length) gives each token in a short answer more weight. With negative advantages, long wrong answers are penalised less per token, so response length can grow without improving accuracy | Dr. GRPO and DAPO use a constant or token-level normalisation. [Exercise 5](exercises/ex05_grpo_advantages.py) shows the weights |
+| **Std normalisation bias** | Dividing by std up-weights prompts with low reward variance (almost always right or almost always wrong) | Dr. GRPO drops the std division, using $r_i - \text{mean}$ only |
+| **Length bias** | Averaging over tokens per sample (a weight of $1/L$ for length $L$) gives each token in a short answer more weight. With negative advantages, long wrong answers are penalised less per token, so response length can grow without improving accuracy | Dr. GRPO and DAPO use a constant or token-level normalisation. [Exercise 5](exercises/ex05_grpo_advantages.py) shows the weights |
 | **Zero-variance groups** | All samples score the same, so no gradient, wasted generation | DAPO's dynamic sampling filters and resamples these groups |
 | **Clip too tight** | A symmetric clip range stops low-probability tokens from growing, which collapses exploration | DAPO's decoupled clip range (a higher upper bound) |
 | **Instability on large or MoE models** | Token-level importance ratios are noisy | GSPO clips at the sequence level |
@@ -981,7 +1021,7 @@ DeepSeek-R1-Zero applied GRPO directly to a base model with rule-based rewards (
 ### What RL for reasoning does and does not do
 
 - It reliably raises **pass@1** (probability that one sample is correct) on the training distribution and transfers to held-out problems of the same kind.
-- Whether it adds *new* capability or sharpens what the base model could already sample is debated. Analyses comparing pass@k at large k suggest that for some setups the base model's pass@k is comparable, meaning RL mostly concentrates probability on solutions the model could already find. Read this as an active research question and avoid stating either side as settled.
+- Whether it adds *new* capability or sharpens what the base model could already sample is debated. Analyses comparing pass@k at large $k$ suggest that for some setups the base model's pass@k is comparable, meaning RL mostly concentrates probability on solutions the model could already find. Read this as an active research question and avoid stating either side as settled.
 - A reward you can game will be gamed: in code tasks, models learn to special-case tests or edit them if the sandbox allows it. Verifiers need to be as adversarially tested as the model.
 - Reward hacking in verifiable settings looks like format exploitation (answer extraction regexes matching the wrong number), spurious length growth and language mixing in chain of thought. Add a format reward and length and language checks, and keep a human-readable sample log.
 
@@ -1005,9 +1045,9 @@ You need a learned reward. An **outcome reward model (ORM)** scores the whole an
 
 <details><summary>Answer</summary>
 
-1. p = 0.25, mean 0.25, std = sqrt(0.25 x 0.75) = 0.433. Correct: 0.75 / 0.433 = +1.732. Wrong: -0.25 / 0.433 = -0.577.
-2. The group mean (and std) of rewards over G samples of the same prompt acts as the baseline. It costs G generations per prompt and gives a noisier baseline than a well-trained critic, but removes a model as large as the policy.
-3. With a 1/length weight per sample, each token of a long answer has a small weight. A long wrong answer (negative advantage) therefore receives less penalty per token than a short wrong answer, so the policy is not discouraged from rambling. Token-level or constant normalisation removes the asymmetry.
+1. $p = 0.25$, mean 0.25, $\text{std} = \sqrt{0.25 \times 0.75} = 0.433$. Correct: $0.75 / 0.433 = +1.732$. Wrong: $-0.25 / 0.433 = -0.577$.
+2. The group mean (and std) of rewards over $G$ samples of the same prompt acts as the baseline. It costs $G$ generations per prompt and gives a noisier baseline than a well-trained critic, but removes a model as large as the policy.
+3. With a $1/\text{length}$ weight per sample, each token of a long answer has a small weight. A long wrong answer (negative advantage) therefore receives less penalty per token than a short wrong answer, so the policy is not discouraged from rambling. Token-level or constant normalisation removes the asymmetry.
 4. Advantage is reward minus the group mean, so every sample has advantage 0 and the policy gradient is zero (apart from the KL term). Prompts that are too easy or too hard for the current model give no signal.
 
 </details>
@@ -1026,7 +1066,7 @@ Mitigations, ordered roughly by cost:
 2. **Replay**: mix 5-25% general instruction data (and, ideally, the model's own outputs on general prompts, which preserves its distribution) into the task data.
 3. **LoRA instead of full fine-tuning**: smaller change in weight space, typically less forgetting, with the learning and forgetting trade-off noted in Part 4.
 4. **Regularise toward the base**: an L2 penalty or KL penalty to the base model's outputs, or elastic weight consolidation (penalise changes to weights important for earlier tasks).
-5. **Interpolate after training**: take W = W_base + lambda x (W_ft - W_base) with lambda below 1, or merge with the base. Sweep lambda against both the task eval and a general eval to find the knee.
+5. **Interpolate after training**: take $W = W_{\text{base}} + \lambda (W_{\text{ft}} - W_{\text{base}})$ with $\lambda$ below 1, or merge with the base. Sweep $\lambda$ against both the task eval and a general eval to find the knee.
 6. **Freeze layers** (for example, only train upper layers) when full fine-tuning is needed.
 
 ### Evaluating a fine-tune
@@ -1037,7 +1077,7 @@ The standard failure is to report one number on one eval. A defensible evaluatio
 2. **General-capability regression suite**: a handful of standard benchmarks plus instruction-following and safety checks. Report deltas, with a threshold decided in advance (for example, no more than 2 points lost on any).
 3. **Behavioural checks**: format validity rate, stop behaviour (does it end?), response length distribution, refusal rate, diversity. These catch problems that accuracy hides.
 4. **Pairwise or judged evaluation** for open-ended tasks. LLM judges prefer longer answers and the first position, so randomise order, control for length, and calibrate the judge against human labels on a sample.
-5. **Statistical honesty.** A win rate of 60% over 200 comparisons has a 95% interval of 60% +- 6.8 points (standard error sqrt(0.6 x 0.4 / 200) = 0.035). To get +-3 points you need about 1,000 comparisons. Report intervals, and treat gaps within them as ties. Pen-and-paper exercise P7 does this arithmetic.
+5. **Statistical honesty.** A win rate of 60% over 200 comparisons has a 95% interval of 60% $\pm 6.8$ points (standard error $\sqrt{0.6 \times 0.4 / 200} = 0.035$). To get $\pm 3$ points you need about 1,000 comparisons. Report intervals, and treat gaps within them as ties. Pen-and-paper exercise P7 does this arithmetic.
 
 Overfitting signals during the run: eval loss rising while train loss falls, verbatim regurgitation of training examples, collapse of output diversity, rising format rigidity. Use early stopping on eval loss, and then confirm on the task metric, since eval loss and task accuracy often disagree.
 
@@ -1045,12 +1085,12 @@ Contamination deserves its own line item: confirm no training example overlaps y
 
 ### Model merging
 
-Merging combines weights from fine-tunes of a *shared base* without further training. Define a **task vector** tau = W_ft - W_base.
+Merging combines weights from fine-tunes of a *shared base* without further training. Define a **task vector** $\tau = W_{\text{ft}} - W_{\text{base}}$.
 
-- **Linear interpolation or weight averaging**: W = W_base + sum_k lambda_k tau_k. WiSE-FT interpolation between base and fine-tuned weights is a simple, effective way to recover robustness lost in fine-tuning.
+- **Linear interpolation or weight averaging**: $W = W_{\text{base}} + \sum_k \lambda_k \tau_k$. WiSE-FT interpolation between base and fine-tuned weights is a simple, effective way to recover robustness lost in fine-tuning.
 - **Task arithmetic**: add task vectors (scale them) to combine skills, or subtract one to remove a behaviour.
 - **TIES**: trim small-magnitude entries of each task vector, resolve sign conflicts across tasks by majority mass, then average only agreeing entries. It reduces interference between tasks.
-- **DARE**: randomly drop a large fraction of task-vector entries (for example 90%) and rescale the rest by 1/(1 - drop rate). The surviving entries approximately preserve the delta's effect, reducing overlap between merged tasks.
+- **DARE**: randomly drop a large fraction of task-vector entries (for example 90%) and rescale the rest by $1/(1 - \text{drop rate})$. The surviving entries approximately preserve the delta's effect, reducing overlap between merged tasks.
 - **SLERP**: spherical interpolation between exactly two models, preserving norms better than linear interpolation.
 
 Why it works at all: fine-tunes of one base remain in the same loss basin as the base, so interpolated weights keep low loss. It fails for independently pretrained models, whose weights are not aligned (hidden units can be permuted without changing function). Merge coefficients come from sweeping on a real eval and not from theory, and merged models need the same full evaluation as any new model.
@@ -1059,14 +1099,14 @@ Why it works at all: fine-tunes of one base remain in the same loss basin as the
 
 1. After fine-tuning your task accuracy rose and MMLU-style accuracy fell 5 points. Give two cheap fixes and one expensive one.
 2. Why do merging methods require a shared base model?
-3. How many pairwise comparisons do you need for a +-5 point 95% interval near 50%?
+3. How many pairwise comparisons do you need for a $\pm 5$ point 95% interval near 50%?
 4. Why is eval loss a weak proxy for task quality?
 
 <details><summary>Answer</summary>
 
 1. Cheap: lower the LR and epochs, mix 10-25% general data into training, or interpolate the tuned weights toward the base. Expensive: switch from full fine-tuning to LoRA and retrain, or add a replay pipeline using the model's own general outputs.
 2. Task vectors are only meaningful as deltas from a common starting point. Fine-tunes from the same base stay in one loss basin and their deltas can be combined linearly. Independently trained models have unaligned weight spaces.
-3. n = 1.96^2 x 0.25 / 0.05^2 = ~384 comparisons.
+3. $n = 1.96^2 \times 0.25 / 0.05^2 \approx 384$ comparisons.
 4. Loss is per-token likelihood of one reference answer, so valid paraphrases are penalised and format or reasoning errors that matter to users may change loss only slightly. It correlates with quality early on and diverges later, which is why you also run task metrics.
 
 </details>
@@ -1082,7 +1122,7 @@ A typical end-to-end story for an interview, with the reasoning behind each choi
 3. **SFT with LoRA** on a few thousand reviewed examples, in the model's chat template, loss on assistant tokens only, EOS included, packing with boundary masks, token-level loss normalisation (Part 2). Estimate memory first: a 7B QLoRA run at ~4.3 GB of weights and adapter state plus activations fits a 24 GB card with checkpointing (Parts 3 to 5).
 4. **Clean the data** with dedup, decontamination and a manual read. Use synthetic data from a strong model with verification, keep human data in the mix (Part 6).
 5. **Evaluate against the baselines** and the regression suite, with confidence intervals. If general capability regressed, lower LR, add replay or interpolate toward the base (Part 10).
-6. **If preference quality matters**, collect or generate pairs from your own model's samples and run DPO with beta around 0.1, watching chosen reward, length and KL to the reference. For reasoning on checkable tasks, use GRPO-style RL with a hardened verifier (Parts 8 and 9).
+6. **If preference quality matters**, collect or generate pairs from your own model's samples and run DPO with $\beta$ around 0.1, watching chosen reward, length and KL to the reference. For reasoning on checkable tasks, use GRPO-style RL with a hardened verifier (Parts 8 and 9).
 7. **Ship** a merged or separately served adapter, version it with the base model, and plan the re-training path for the next base release.
 
 How the pieces connect: the KL-regularised objective from RLHF (Part 7) is the starting point for DPO (Part 8), and its KL term is the same KL leash in GRPO (Part 9). The Bradley-Terry model is the reward model's loss and the DPO derivation's bridge. The memory arithmetic of Part 3 explains why LoRA and QLoRA exist and why GRPO is attractive relative to PPO. The quality-over-quantity lesson from Part 6 recurs everywhere: preference data, RL prompts and eval sets all need the same care.

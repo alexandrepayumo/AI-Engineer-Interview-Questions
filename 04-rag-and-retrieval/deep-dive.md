@@ -43,36 +43,40 @@ Do the "Check yourself" questions after each part and run the matching exercise 
 
 ### The problem
 
-Retrieval needs a function `score(query, document)` that is cheap enough to evaluate over millions of documents. Dense retrieval maps both to vectors in R^d and uses a geometric score. Three scores dominate: dot product, cosine similarity and Euclidean (L2) distance. They are related, and knowing exactly how tells you when the choice matters and when it is irrelevant.
+Retrieval needs a function `score(query, document)` that is cheap enough to evaluate over millions of documents. Dense retrieval maps both to vectors in $\mathbb{R}^d$ and uses a geometric score. Three scores dominate: dot product, cosine similarity and Euclidean (L2) distance. They are related, and knowing exactly how tells you when the choice matters and when it is irrelevant.
 
 ### The three scores
 
-For vectors a and b:
+For vectors $a$ and $b$:
 
-```
-dot(a, b)    = sum_i a_i * b_i             = |a| |b| cos(theta)
-cos(a, b)    = dot(a, b) / (|a| |b|)       depends on angle only
-L2(a, b)^2   = |a|^2 + |b|^2 - 2 dot(a, b)
+```math
+\begin{aligned}
+\operatorname{dot}(a, b) &= \sum_i a_i b_i = \lVert a \rVert \thinspace \lVert b \rVert \cos\theta \\
+\cos(a, b) &= \frac{\operatorname{dot}(a, b)}{\lVert a \rVert \thinspace \lVert b \rVert} && \text{depends on angle only} \\
+\operatorname{L2}(a, b)^2 &= \lVert a \rVert^2 + \lVert b \rVert^2 - 2 \operatorname{dot}(a, b)
+\end{aligned}
 ```
 
 Dot product mixes angle and length. Cosine removes length. Squared L2 mixes both lengths with the dot product.
 
-Worked example with a = (3, 4), b = (6, 8), c = (4, 3):
+Worked example with $a = (3, 4)$, $b = (6, 8)$, $c = (4, 3)$:
 
 | Pair | dot | cosine | L2 distance |
 |---|---|---|---|
 | a, b | 50 | 1.00 | 5.00 |
 | a, c | 24 | 0.96 | 1.41 |
 
-b points in exactly the same direction as a but is twice as long. Dot and cosine both put b first (cosine ties it at the maximum 1.0, dot rewards its length). L2 puts c first because c is physically closer to a. The three scores disagree on which neighbour is "nearest" whenever vector lengths vary.
+$b$ points in exactly the same direction as $a$ but is twice as long. Dot and cosine both put $b$ first (cosine ties it at the maximum 1.0, dot rewards its length). L2 puts $c$ first because $c$ is physically closer to $a$. The three scores disagree on which neighbour is "nearest" whenever vector lengths vary.
 
 ### Normalisation makes them the same ranking
 
-If every vector has length 1, then |a| = |b| = 1 and:
+If every vector has length 1, then $\lVert a \rVert = \lVert b \rVert = 1$ and:
 
-```
-dot(a, b) = cos(a, b)
-L2(a, b)^2 = 2 - 2 cos(a, b)
+```math
+\begin{aligned}
+\operatorname{dot}(a, b) &= \cos(a, b) \\
+\operatorname{L2}(a, b)^2 &= 2 - 2 \cos(a, b)
+\end{aligned}
 ```
 
 So on unit vectors, maximising cosine, maximising dot and minimising L2 give the identical ranking. That is why most embedding models ship normalised outputs (or document that you should normalise) and why vector databases offer all three metrics but the choice rarely changes results once vectors are normalised. The practical consequences:
@@ -83,7 +87,7 @@ So on unit vectors, maximising cosine, maximising dot and minimising L2 give the
 
 ### Maximum inner product search is not a metric search
 
-Dot product on unnormalised vectors is not a distance: dot(a, a) is not the maximum over b, and the triangle inequality fails. Graph and tree indexes assume a metric. The standard fix is to augment each database vector x with one extra coordinate so that L2 search on the augmented vectors equals inner-product search on the originals:
+Dot product on unnormalised vectors is not a distance: $\operatorname{dot}(a, a)$ is not the maximum over $b$, and the triangle inequality fails. Graph and tree indexes assume a metric. The standard fix is to augment each database vector $x$ with one extra coordinate so that L2 search on the augmented vectors equals inner-product search on the originals:
 
 ```python
 import numpy as np
@@ -97,13 +101,13 @@ def mips_to_l2(X: np.ndarray, q: np.ndarray):
     return X_aug, q_aug
 ```
 
-Every augmented row has squared norm M2. Then `|q - x|^2 = |q|^2 + M2 - 2 dot(q, x)`, and since |q|^2 and M2 are constants for a given query, the L2 ranking equals the dot-product ranking.
+Every augmented row has squared norm $M^2$ (the `M2` in the code). Then $\lVert q - x \rVert^2 = \lVert q \rVert^2 + M^2 - 2 \operatorname{dot}(q, x)$, and since $\lVert q \rVert^2$ and $M^2$ are constants for a given query, the L2 ranking equals the dot-product ranking.
 
 ### Why high dimensions behave strangely
 
-Take two random unit vectors in d dimensions. Their cosine has mean 0 and standard deviation about 1/sqrt(d):
+Take two random unit vectors in $d$ dimensions. Their cosine has mean 0 and standard deviation about $1/\sqrt{d}$:
 
-| d | std of random cosine |
+| $d$ | std of random cosine |
 |---|---|
 | 3 | ~0.58 |
 | 32 | ~0.18 |
@@ -111,7 +115,7 @@ Take two random unit vectors in d dimensions. Their cosine has mean 0 and standa
 
 (Verified numerically; see the snippet below.) Two consequences matter in practice.
 
-First, **distances concentrate**. In high dimensions, the nearest and farthest random points are at similar distances, so the contrast that ANN indexes exploit comes from real structure in the data (clusters, low intrinsic dimension), not from the geometry of R^768. Real text embeddings lie near a low-dimensional manifold, which is why ANN works at all.
+First, **distances concentrate**. In high dimensions, the nearest and farthest random points are at similar distances, so the contrast that ANN indexes exploit comes from real structure in the data (clusters, low intrinsic dimension), not from the geometry of $\mathbb{R}^{768}$. Real text embeddings lie near a low-dimensional manifold, which is why ANN works at all.
 
 Second, **absolute cosine values are not calibrated**. Real embedders are anisotropic: unrelated texts often score 0.6-0.8 rather than 0, and the range differs per model. A threshold of 0.75 means different things in different models and sometimes in different domains of the same model. Use cosine for ranking, and if you need a cut-off, calibrate it on labelled queries from your own corpus.
 
@@ -127,7 +131,7 @@ for d in (3, 32, 768):
 
 ### Brute force is a matrix multiply
 
-For normalised vectors, exact search over N documents with Q queries is `scores = Q @ D.T`, then top-k. For N = 1M documents at d = 768 in float32, D occupies 1M x 768 x 4 B = 3.07 GB, and scoring one query reads all of it, so a single query is memory-bandwidth bound. A batch of 64 queries reuses each loaded block 64 times and costs far less per query. That is why exact search is a legitimate choice up to a few million vectors, especially on a GPU or with batched traffic.
+For normalised vectors, exact search over $N$ documents with $Q$ queries is `scores = Q @ D.T`, then top-k. For $N = 1\text{M}$ documents at $d = 768$ in float32, $D$ occupies $1\text{M} \times 768 \times 4\ \text{B} = 3.07\ \text{GB}$, and scoring one query reads all of it, so a single query is memory-bandwidth bound. A batch of 64 queries reuses each loaded block 64 times and costs far less per query. That is why exact search is a legitimate choice up to a few million vectors, especially on a GPU or with batched traffic.
 
 ### Check yourself
 
@@ -135,7 +139,7 @@ For normalised vectors, exact search over N documents with Q queries is `scores 
 
 <details><summary>Answer</summary>
 
-2 - 2 x 0.9 = 0.2. This is the identity `|a - b|^2 = 2 - 2 cos` for unit vectors.
+$2 - 2 \times 0.9 = 0.2$. This is the identity $\lVert a - b \rVert^2 = 2 - 2\cos\theta$ for unit vectors.
 
 </details>
 
@@ -143,7 +147,7 @@ For normalised vectors, exact search over N documents with Q queries is `scores 
 
 <details><summary>Answer</summary>
 
-Dot product equals |a||b|cos, so a large |b| inflates the score regardless of angle. Fixes: L2-normalise vectors at index and query time (turns dot into cosine), or switch to cosine. If the model deliberately uses length as a signal, keep dot product but verify that on your own evaluation set.
+Dot product equals $\lVert a \rVert \thinspace \lVert b \rVert \cos\theta$, so a large $\lVert b \rVert$ inflates the score regardless of angle. Fixes: L2-normalise vectors at index and query time (turns dot into cosine), or switch to cosine. If the model deliberately uses length as a signal, keep dot product but verify that on your own evaluation set.
 
 </details>
 
@@ -151,7 +155,7 @@ Dot product equals |a||b|cos, so a large |b| inflates the score regardless of an
 
 <details><summary>Answer</summary>
 
-Inner product is not a metric, so the "closer neighbours of neighbours are closer" structure that graph search relies on does not hold. Adding a coordinate sqrt(M2 - |x|^2) gives all database vectors the same norm M2, which makes the L2 ranking identical to the dot-product ranking, and L2 is a metric.
+Inner product is not a metric, so the "closer neighbours of neighbours are closer" structure that graph search relies on does not hold. Adding a coordinate $\sqrt{M^2 - \lVert x \rVert^2}$ gives all database vectors the same squared norm $M^2$, which makes the L2 ranking identical to the dot-product ranking, and L2 is a metric.
 
 </details>
 
@@ -165,24 +169,25 @@ Dense vectors can blur exact terms. BM25 scores documents by the query words the
 
 ### The formula
 
-For a query with terms t, a document D of length |D| tokens, and a corpus with average document length avgdl:
+For a query with terms $t$, a document $D$ of length $\lvert D \rvert$ tokens, and a corpus with average document length $\text{avgdl}$:
 
+```math
+\begin{aligned}
+\operatorname{score}(D, Q) &= \sum_{t \in Q} \operatorname{IDF}(t) \cdot \operatorname{TF}(t, D) \\
+\operatorname{IDF}(t) &= \ln\left(1 + \frac{N - n_t + 0.5}{n_t + 0.5}\right) \\
+\operatorname{TF}(t, D) &= \frac{f \cdot (k_1 + 1)}{f + k_1 \cdot \left(1 - b + b \cdot \lvert D \rvert / \text{avgdl}\right)}
+\end{aligned}
 ```
-score(D, Q) = sum over t in Q of  IDF(t) * TF(t, D)
 
-IDF(t)   = ln( 1 + (N - n_t + 0.5) / (n_t + 0.5) )
-TF(t, D) = f * (k1 + 1) / ( f + k1 * (1 - b + b * |D| / avgdl) )
-```
-
-N is the number of documents, n_t is the number containing t, and f is the count of t in D. Common defaults are k1 = 1.2 (range ~1.2-2.0) and b = 0.75. The `ln(1 + ...)` form is the one used by Lucene-family engines, and it is never negative, unlike the original Robertson-Sparck Jones form that can go negative for terms in more than half the documents.
+$N$ is the number of documents, $n_t$ is the number containing $t$, and $f$ is the count of $t$ in $D$. Common defaults are $k_1 = 1.2$ (range ~1.2-2.0) and $b = 0.75$. The $\ln(1 + \dots)$ form is the one used by Lucene-family engines, and it is never negative, unlike the original Robertson-Sparck Jones form that can go negative for terms in more than half the documents.
 
 Each piece answers a question about a weakness of simpler schemes.
 
 ### IDF: rare terms carry more evidence
 
-A word in every document tells you nothing, a word in 100 of a million tells you a lot. With N = 1,000,000:
+A word in every document tells you nothing, a word in 100 of a million tells you a lot. With $N = 1{,}000{,}000$:
 
-| n_t (docs containing the term) | IDF |
+| $n_t$ (docs containing the term) | IDF |
 |---|---|
 | 100 | 9.21 |
 | 100,000 | 2.30 |
@@ -192,9 +197,9 @@ A match on a rare token such as an error code is worth roughly four times a matc
 
 ### TF saturation: the k1 parameter
 
-Raw term frequency is a bad signal. A document that says "refund" 50 times is not 50 times more relevant than one that says it twice. The TF component saturates toward an asymptote of k1 + 1. At average length (|D| = avgdl) the formula reduces to `f (k1 + 1) / (f + k1)`, and with k1 = 1.2:
+Raw term frequency is a bad signal. A document that says "refund" 50 times is not 50 times more relevant than one that says it twice. The TF component saturates toward an asymptote of $k_1 + 1$. At average length, where $\lvert D \rvert = \text{avgdl}$, the formula reduces to $\tfrac{f (k_1 + 1)}{f + k_1}$, and with $k_1 = 1.2$:
 
-| f | TF component |
+| $f$ | TF component |
 |---|---|
 | 1 | 1.000 |
 | 2 | 1.375 |
@@ -203,24 +208,24 @@ Raw term frequency is a bad signal. A document that says "refund" 50 times is no
 | 10 | 1.964 |
 | 50 | 2.148 |
 
-The ceiling is 2.2. Going from 1 to 2 occurrences adds 0.375, going from 10 to 50 adds 0.18. Higher k1 delays saturation. For f = 3 and f = 10 at average length: k1 = 0 gives 1.0 for both (pure presence, no counting), k1 = 0.5 gives 1.29 and 1.43, k1 = 1.2 gives 1.57 and 1.96, k1 = 2.0 gives 1.80 and 2.50. Use higher k1 when repetition is a genuine relevance signal (long documents about one topic) and lower when mentions are cheap.
+The ceiling is 2.2. Going from 1 to 2 occurrences adds 0.375, going from 10 to 50 adds 0.18. Higher $k_1$ delays saturation. For $f = 3$ and $f = 10$ at average length: $k_1 = 0$ gives 1.0 for both (pure presence, no counting), $k_1 = 0.5$ gives 1.29 and 1.43, $k_1 = 1.2$ gives 1.57 and 1.96, $k_1 = 2.0$ gives 1.80 and 2.50. Use higher $k_1$ when repetition is a genuine relevance signal (long documents about one topic) and lower when mentions are cheap.
 
 ### Length normalisation: the b parameter
 
-A long document has more chances to contain a term by accident. The denominator term `1 - b + b * |D| / avgdl` scales the effective term frequency by relative length. b = 0 turns normalisation off, b = 1 applies it fully. For f = 3 occurrences with avgdl = 100:
+A long document has more chances to contain a term by accident. The denominator term $1 - b + b \cdot \lvert D \rvert / \text{avgdl}$ scales the effective term frequency by relative length. $b = 0$ turns normalisation off, $b = 1$ applies it fully. For $f = 3$ occurrences with $\text{avgdl} = 100$:
 
-| |D| | TF component (k1 = 1.2, b = 0.75) |
+| $\lvert D \rvert$ | TF component ($k_1 = 1.2$, $b = 0.75$) |
 |---|---|
 | 50 | 1.760 |
 | 100 | 1.571 |
 | 200 | 1.294 |
 | 400 | 0.957 |
 
-The same three mentions are worth 1.76 in a short document and 0.96 in a long one. For |D| = 300 and f = 3: b = 0 gives 1.571, b = 0.75 gives 1.10 and b = 1 gives 1.00. Lower b for corpora where long documents are long because they are comprehensive (manuals, legal text), higher b where length is mostly padding.
+The same three mentions are worth 1.76 in a short document and 0.96 in a long one. For $\lvert D \rvert = 300$ and $f = 3$: $b = 0$ gives 1.571, $b = 0.75$ gives 1.10 and $b = 1$ gives 1.00. Lower $b$ for corpora where long documents are long because they are comprehensive (manuals, legal text), higher $b$ where length is mostly padding.
 
 ### Worked example
 
-Corpus: N = 1,000,000 chunks, avgdl = 100. Query: `rate limit error429`. Document frequencies: "rate" in 50,000 chunks, "limit" in 80,000, "error429" in 120.
+Corpus: $N = 1{,}000{,}000$ chunks, $\text{avgdl} = 100$. Query: `rate limit error429`. Document frequencies: "rate" in 50,000 chunks, "limit" in 80,000, "error429" in 120.
 
 | Term | IDF |
 |---|---|
@@ -228,17 +233,19 @@ Corpus: N = 1,000,000 chunks, avgdl = 100. Query: `rate limit error429`. Documen
 | limit | 2.526 |
 | error429 | 9.024 |
 
-Document 1 is short (80 tokens): rate x2, limit x1, error429 x1. Document 2 is long (300 tokens): rate x6, limit x5, no error429.
+Document 1 is short (80 tokens): rate $\times 2$, limit $\times 1$, error429 $\times 1$. Document 2 is long (300 tokens): rate $\times 6$, limit $\times 5$, no error429.
 
-```
-Doc 1: rate     2.996 * 1.457 = 4.37
-       limit    2.526 * 1.089 = 2.75
-       error429 9.024 * 1.089 = 9.83     total 16.94
-Doc 2: rate     2.996 * 1.467 = 4.39
-       limit    2.526 * 1.375 = 3.47     total  7.87
+```math
+\begin{aligned}
+\text{Doc 1:}\quad \text{rate} &\quad 2.996 \times 1.457 = 4.37 \\
+\text{limit} &\quad 2.526 \times 1.089 = 2.75 \\
+\text{error429} &\quad 9.024 \times 1.089 = 9.83 && \text{total } 16.94 \\
+\text{Doc 2:}\quad \text{rate} &\quad 2.996 \times 1.467 = 4.39 \\
+\text{limit} &\quad 2.526 \times 1.375 = 3.47 && \text{total } 7.87
+\end{aligned}
 ```
 
-Document 2 repeats the common words far more but loses by more than 2x because it lacks the rare token. This is the behaviour that makes BM25 reliable for "find the doc that mentions this exact code". The same example shows its limit: if the user types "429 too many requests" and the document says "rate limiting exceeded", there is no term overlap and BM25 scores zero.
+Document 2 repeats the common words far more but loses by more than $2\times$ because it lacks the rare token. This is the behaviour that makes BM25 reliable for "find the doc that mentions this exact code". The same example shows its limit: if the user types "429 too many requests" and the document says "rate limiting exceeded", there is no term overlap and BM25 scores zero.
 
 ### A numpy implementation
 
@@ -274,31 +281,35 @@ Production engines keep an inverted index (term -> posting list of doc id and fr
 - **Field weighting.** Titles and headings usually deserve a boost (BM25F).
 - **Corpus statistics.** IDF and avgdl come from the whole index. In a multi-tenant system, per-tenant statistics can differ from global ones. Know which your engine uses.
 
-k1 and b are cheap to grid-search on a golden set. Do not assume dense retrieval replaced BM25: on the BEIR benchmark, BM25 stayed a hard baseline for out-of-domain retrieval, and it still wins on identifier-heavy queries.
+$k_1$ and $b$ are cheap to grid-search on a golden set. Do not assume dense retrieval replaced BM25: on the BEIR benchmark, BM25 stayed a hard baseline for out-of-domain retrieval, and it still wins on identifier-heavy queries.
 
 ### Check yourself
 
-1. As f goes to infinity, what does the TF component approach, and what does that mean for keyword stuffing?
+1. As $f$ goes to infinity, what does the TF component approach, and what does that mean for keyword stuffing?
 
 <details><summary>Answer</summary>
 
-It approaches k1 + 1 (2.2 for k1 = 1.2) at average length. Repeating a term many times gains almost nothing past a handful of occurrences, which limits the effect of stuffing a keyword in a document.
+It approaches $k_1 + 1$ (2.2 for $k_1 = 1.2$) at average length. Repeating a term many times gains almost nothing past a handful of occurrences, which limits the effect of stuffing a keyword in a document.
 
 </details>
 
-2. A term occurs in every document. What is its IDF in the Lucene form with N = 1000?
+2. A term occurs in every document. What is its IDF in the Lucene form with $N = 1000$?
 
 <details><summary>Answer</summary>
 
-n_t = N = 1000, so IDF = ln(1 + 0.5 / 1000.5) = ln(1.0004998) = ~0.0005. Essentially zero, and never negative.
+$n_t = N = 1000$, so $\operatorname{IDF} = \ln(1 + 0.5 / 1000.5) = \ln(1.0004998) \approx 0.0005$. Essentially zero, and never negative.
 
 </details>
 
-3. The same chunk is 4x the average length and has f = 3. With k1 = 1.2, b = 0.75, what is the TF component, and what happens with b = 0?
+3. The same chunk is $4\times$ the average length and has $f = 3$. With $k_1 = 1.2$, $b = 0.75$, what is the TF component, and what happens with $b = 0$?
 
 <details><summary>Answer</summary>
 
-With b = 0.75: 3 x 2.2 / (3 + 1.2 x (0.25 + 0.75 x 4)) = 6.6 / (3 + 1.2 x 3.25) = 6.6 / 6.9 = 0.957. With b = 0 it is 3 x 2.2 / (3 + 1.2) = 1.571, so no length penalty.
+With $b = 0.75$:
+
+$$\frac{3 \times 2.2}{3 + 1.2 \times (0.25 + 0.75 \times 4)} = \frac{6.6}{3 + 1.2 \times 3.25} = \frac{6.6}{6.9} = 0.957$$
+
+With $b = 0$ it is $\tfrac{3 \times 2.2}{3 + 1.2} = 1.571$, so no length penalty.
 
 </details>
 
@@ -326,47 +337,49 @@ Many embedders are trained asymmetrically: queries and passages carry different 
 
 ### The training objective: InfoNCE
 
-Take a batch of B (query, positive document) pairs. Encode all of them, giving unit-norm vectors q_i and d_j. Build the B x B similarity matrix `S_ij = q_i . d_j`. Treat each row as a B-way classification problem whose correct class is the diagonal entry:
+Take a batch of $B$ (query, positive document) pairs. Encode all of them, giving unit-norm vectors $q_i$ and $d_j$. Build the $B \times B$ similarity matrix $S_{ij} = q_i \cdot d_j$. Treat each row as a $B$-way classification problem whose correct class is the diagonal entry:
 
-```
-logits_ij = S_ij / tau
-p_ij      = softmax over j of logits_ij
-loss      = - mean over i of log p_ii
+```math
+\begin{aligned}
+\text{logits}_{ij} &= S_{ij} / \tau \\
+p_{ij} &= \operatorname{softmax}_j\big(\text{logits}_{ij}\big) \\
+\mathcal{L} &= -\frac{1}{B} \sum_i \log p_{ii}
+\end{aligned}
 ```
 
-tau is the temperature. Every other document in the batch serves as a negative for query i, so a batch of B pairs yields B - 1 negatives per query "for free" (B(B-1) in total) without encoding anything extra. That is the reason contrastive embedders train with large batches, sometimes thousands of pairs, using gradient caching or distributed all-gather to reach them.
+$\tau$ is the temperature. Every other document in the batch serves as a negative for query $i$, so a batch of $B$ pairs yields $B - 1$ negatives per query "for free" ($B(B-1)$ in total) without encoding anything extra. That is the reason contrastive embedders train with large batches, sometimes thousands of pairs, using gradient caching or distributed all-gather to reach them.
 
 ### Worked example
 
 A batch of three, with these similarities (rows are queries, columns are documents, diagonal entries are the true pairs):
 
-```
-S = [[0.8, 0.3, 0.1],
-     [0.2, 0.7, 0.6],
-     [0.0, 0.1, 0.5]]
+```math
+S = \begin{bmatrix} 0.8 & 0.3 & 0.1 \\ 0.2 & 0.7 & 0.6 \\ 0.0 & 0.1 & 0.5 \end{bmatrix}
 ```
 
 Query 2 is in trouble: its positive scores 0.7 but document 3 scores 0.6. Softmax over each row at three temperatures gives these probabilities for the correct class, per-row losses, and mean loss:
 
-| tau | p_11 | p_22 | p_33 | row losses | mean loss |
+| $\tau$ | $p_{11}$ | $p_{22}$ | $p_{33}$ | row losses | mean loss |
 |---|---|---|---|---|---|
 | 1.0 | 0.476 | 0.398 | 0.439 | 0.743, 0.921, 0.823 | 0.829 |
 | 0.1 | 0.992 | 0.728 | 0.976 | 0.008, 0.318, 0.025 | 0.117 |
 | 0.05 | 1.000 | 0.881 | 1.000 | 0.000, 0.127, 0.000 | 0.042 |
 
-Two readings. At tau = 1 the softmax is nearly flat, so the loss barely distinguishes a 0.7 from a 0.6, and the model gets a weak signal. Lower tau amplifies similarity differences, so the loss concentrates on the rows that are still wrong (row 2). Typical contrastive embedders use temperatures in the region of ~0.01-0.05 for unit-norm vectors, sometimes learned.
+Two readings. At $\tau = 1$ the softmax is nearly flat, so the loss barely distinguishes a 0.7 from a 0.6, and the model gets a weak signal. Lower $\tau$ amplifies similarity differences, so the loss concentrates on the rows that are still wrong (row 2). Typical contrastive embedders use temperatures in the region of ~0.01-0.05 for unit-norm vectors, sometimes learned.
 
 ### The gradient shows what negatives do
 
-Let P be the softmax matrix and Y the one-hot matrix of correct columns. For the mean loss:
+Let $P$ be the softmax matrix and $Y$ the one-hot matrix of correct columns. For the mean loss:
 
-```
-dL/dlogits = (P - Y) / B
-dL/dq_i    = (1 / (tau B)) * sum_j (P_ij - Y_ij) * d_j
-dL/dd_j    = (1 / (tau B)) * sum_i (P_ij - Y_ij) * q_i
+```math
+\begin{aligned}
+\frac{\partial \mathcal{L}}{\partial\, \text{logits}} &= \frac{P - Y}{B} \\
+\frac{\partial \mathcal{L}}{\partial q_i} &= \frac{1}{\tau B} \sum_j (P_{ij} - Y_{ij})\, d_j \\
+\frac{\partial \mathcal{L}}{\partial d_j} &= \frac{1}{\tau B} \sum_i (P_{ij} - Y_{ij})\, q_i
+\end{aligned}
 ```
 
-For row 2 at tau = 0.1 the probabilities are (0.005, 0.728, 0.268), so the logit gradient is (0.005, -0.272, +0.268) before dividing by B. The positive is pulled toward the query with weight 0.272 and the hard negative (document 3) is pushed away with weight 0.268, while the easy negative (document 1) receives 0.005, about 2% of the push. The gradient on each negative is proportional to its softmax probability, so **easy negatives contribute almost nothing and hard negatives drive learning**. Exercise 2 implements this and checks it against a numerical gradient.
+For row 2 at $\tau = 0.1$ the probabilities are $(0.005, 0.728, 0.268)$, so the logit gradient is $(0.005, -0.272, +0.268)$ before dividing by $B$. The positive is pulled toward the query with weight 0.272 and the hard negative (document 3) is pushed away with weight 0.268, while the easy negative (document 1) receives 0.005, about 2% of the push. The gradient on each negative is proportional to its softmax probability, so **easy negatives contribute almost nothing and hard negatives drive learning**. Exercise 2 implements this and checks it against a numerical gradient.
 
 With temperature near zero the loss approaches a hinge-like objective on the hardest negative. Too low a temperature makes training unstable and overfits to label noise: if the "hardest negative" is actually a false negative (a passage that is relevant but not marked), the model is trained to push apart items that should be close.
 
@@ -378,7 +391,7 @@ Random in-batch negatives are mostly easy, so at some point the loss stops teach
 - **Top results from the current dense model** (ANN-mined), refreshed periodically so negatives keep pace with the model.
 - **Other chunks from the same document** or same product family.
 
-Take the hard negatives from a mid-ranked band (for example ranks 10-100 after removing known positives), not from the very top, because the top few are the most likely to be unlabelled true positives. In code, hard negatives are just extra rows in the document matrix: the loss and gradient formulas above do not change, only N grows beyond B.
+Take the hard negatives from a mid-ranked band (for example ranks 10-100 after removing known positives), not from the very top, because the top few are the most likely to be unlabelled true positives. In code, hard negatives are just extra rows in the document matrix: the loss and gradient formulas above do not change, only $N$ grows beyond $B$.
 
 ### Domain fine-tuning in practice
 
@@ -386,7 +399,7 @@ The highest-return embedder change for jargon-heavy corpora is fine-tuning on in
 
 ### Matryoshka embeddings
 
-Matryoshka representation learning adds the contrastive loss at several prefix lengths (for example 64, 128, 256, 512, 1024 dimensions) so the first m coordinates form a good embedding on their own. You can then truncate to m dimensions and re-normalise to cut memory and search time, or search with a short prefix for a first pass and rescore with the full vector. Truncating a vector from a model not trained this way works much worse.
+Matryoshka representation learning adds the contrastive loss at several prefix lengths (for example 64, 128, 256, 512, 1024 dimensions) so the first $m$ coordinates form a good embedding on their own. You can then truncate to $m$ dimensions and re-normalise to cut memory and search time, or search with a short prefix for a first pass and rescore with the full vector. Truncating a vector from a model not trained this way works much worse.
 
 ### Check yourself
 
@@ -398,11 +411,11 @@ Matryoshka representation learning adds the contrastive loss at several prefix l
 
 </details>
 
-2. Uniform logits over N candidates: what is the InfoNCE loss, and why is that a useful sanity check?
+2. Uniform logits over $N$ candidates: what is the InfoNCE loss, and why is that a useful sanity check?
 
 <details><summary>Answer</summary>
 
-log N, because each candidate gets probability 1/N and the loss is -log(1/N). At initialisation, with random embeddings, a batch loss near log B tells you the pipeline works. A loss far above it suggests a bug or a bad scale.
+$\log N$, because each candidate gets probability $1/N$ and the loss is $-\log(1/N)$. At initialisation, with random embeddings, a batch loss near $\log B$ tells you the pipeline works. A loss far above it suggests a bug or a bad scale.
 
 </details>
 
@@ -410,7 +423,7 @@ log N, because each candidate gets probability 1/N and the loss is -log(1/N). At
 
 <details><summary>Answer</summary>
 
-Dividing by a small tau widens the gaps between logits before the softmax, so the probability mass (and hence the gradient weight p_ij) concentrates on the highest-scoring negatives. Easy negatives get p near zero and contribute no gradient.
+Dividing by a small $\tau$ widens the gaps between logits before the softmax, so the probability mass (and hence the gradient weight $p_{ij}$ ) concentrates on the highest-scoring negatives. Easy negatives get $p$ near zero and contribute no gradient.
 
 </details>
 
@@ -428,7 +441,7 @@ The top 3 often contain unlabelled relevant passages (false negatives), so the l
 
 ### The problem
 
-Exact search reads every vector. At 100M vectors x 768 dims x 4 bytes = 307 GB per query, that is not an option. Approximate nearest-neighbour indexes inspect a small fraction of the data and accept that some true neighbours are missed. Everything is a trade among **recall@k** (versus exact search), **latency**, and **memory**.
+Exact search reads every vector. At $100\text{M vectors} \times 768\ \text{dims} \times 4\ \text{bytes} = 307\ \text{GB}$ per query, that is not an option. Approximate nearest-neighbour indexes inspect a small fraction of the data and accept that some true neighbours are missed. Everything is a trade among **recall@k** (versus exact search), **latency**, and **memory**.
 
 ### The three levers
 
@@ -442,9 +455,9 @@ They compose. Typical large-scale stacks are IVF + PQ (partition and compress), 
 
 ### HNSW
 
-A **navigable small world graph** links each vector to nearby vectors plus a few long-range links. Greedy search starts at an entry point and repeatedly moves to the neighbour closest to the query. Because of the long links the number of hops grows roughly logarithmically with N rather than linearly.
+A **navigable small world graph** links each vector to nearby vectors plus a few long-range links. Greedy search starts at an entry point and repeatedly moves to the neighbour closest to the query. Because of the long links the number of hops grows roughly logarithmically with $N$ rather than linearly.
 
-HNSW stacks several such graphs. Each inserted node draws a maximum layer `L = floor(-ln(U) * mL)` with U uniform in (0, 1] and `mL = 1 / ln(M)`. With M = 16, the probability a node reaches layer 1 or higher is 1/M = 1/16 = 6.25%, layer 2 or higher 1/256, and so on. The top layers are sparse "highways", the bottom layer holds every node.
+HNSW stacks several such graphs. Each inserted node draws a maximum layer $L = \lfloor -\ln(U) \cdot m_L \rfloor$ with $U$ uniform in $(0, 1]$ and $m_L = 1 / \ln M$. With $M = 16$, the probability a node reaches layer 1 or higher is $1/M = 1/16 = 0.0625$, or 6.25%, layer 2 or higher $1/256$, and so on. The top layers are sparse "highways", the bottom layer holds every node.
 
 ```mermaid
 flowchart TD
@@ -458,11 +471,11 @@ Search descends greedily with a beam of 1 through the upper layers to find a goo
 
 Parameters:
 
-- **M**: maximum links per node (layer 0 usually allows 2M). Higher M raises recall and memory.
+- $M$: maximum links per node (layer 0 usually allows $2M$). Higher $M$ raises recall and memory.
 - **ef_construction**: beam width while inserting. Higher gives a better graph and slower builds. It is fixed once built.
-- **ef_search**: beam width at query time. It must be at least k. This is the knob you tune online, trading latency for recall.
+- **ef_search**: beam width at query time. It must be at least $k$. This is the knob you tune online, trading latency for recall.
 
-Cost and memory. Each layer-0 node stores up to 2M neighbour ids. With M = 16 and 4-byte ids that is 128 bytes per node, plus a small amount for upper layers, so roughly 130-150 bytes of graph overhead per vector. For 100M vectors that is ~13-15 GB of links, on top of the vectors themselves (307 GB at float32 and 768 dimensions). The graph is rarely the dominant cost for high-dimensional vectors, the vectors are.
+Cost and memory. Each layer-0 node stores up to $2M$ neighbour ids. With $M = 16$ and 4-byte ids that is $2 \times 16 \times 4 = 128$ bytes per node, plus a small amount for upper layers, so roughly 130-150 bytes of graph overhead per vector. For 100M vectors that is ~13-15 GB of links, on top of the vectors themselves (307 GB at float32 and 768 dimensions). The graph is rarely the dominant cost for high-dimensional vectors, the vectors are.
 
 Weak points to know: HNSW needs everything in RAM (or a disk-based variant), builds are slow, deletes are usually soft ("tombstones") so the graph degrades until it is rebuilt, and **filtered search** can fail when the filter leaves few reachable nodes (see below). Exercise 7 builds a small version and shows recall rising with `ef` while the number of distance computations grows.
 
@@ -470,73 +483,77 @@ Weak points to know: HNSW needs everything in RAM (or a disk-based variant), bui
 
 An inverted-file index runs k-means on the vectors to get `nlist` centroids and stores each vector in the list of its nearest centroid. A query finds the `nprobe` closest centroids and scans only those lists. Cost per query:
 
-```
-distance computations = nlist + nprobe * (N / nlist)
+```math
+\text{distance computations} = \text{nlist} + \text{nprobe} \cdot \frac{N}{\text{nlist}}
 ```
 
-For N = 1M, nlist = 1,000 and nprobe = 10: 1,000 + 10,000 = 11,000 distance computations, about 90x fewer than brute force. Minimising `nlist + nprobe * N / nlist` over nlist gives `nlist = sqrt(nprobe * N)`. For nprobe = 10 that is sqrt(10^7) = 3,162, cost 6,325. This is why `nlist` is commonly set to a small multiple of sqrt(N).
+For $N = 1\text{M}$, $\text{nlist} = 1{,}000$ and $\text{nprobe} = 10$: $1{,}000 + 10{,}000 = 11{,}000$ distance computations, about $90\times$ fewer than brute force. Minimising $\text{nlist} + \text{nprobe} \cdot N / \text{nlist}$ over nlist gives $\text{nlist} = \sqrt{\text{nprobe} \cdot N}$. For $\text{nprobe} = 10$ that is $\sqrt{10^7} = 3{,}162$, cost $6{,}325$. This is why `nlist` is commonly set to a small multiple of $\sqrt{N}$.
 
-Recall loss comes from **boundary effects**: a true neighbour whose cell centroid is not among the nprobe closest to the query is never examined. Larger nprobe fixes that and raises cost. With nprobe = nlist the search is exact. Because probe sets are nested (probing 3 cells includes the 2 you probed before), recall is non-decreasing in nprobe. Exercise 3 measures exactly this.
+Recall loss comes from **boundary effects**: a true neighbour whose cell centroid is not among the nprobe closest to the query is never examined. Larger nprobe fixes that and raises cost. With $\text{nprobe} = \text{nlist}$ the search is exact. Because probe sets are nested (probing 3 cells includes the 2 you probed before), recall is non-decreasing in nprobe. Exercise 3 measures exactly this.
 
 IVF's weaknesses: it must be trained on representative data, and as the corpus drifts the centroids go stale and cells become unbalanced, so recall at fixed nprobe falls. Plan periodic retraining.
 
 ### Product quantisation
 
-PQ compresses a vector by splitting it into m sub-vectors and replacing each with the id of its nearest centroid in a small codebook trained per sub-space (usually 256 centroids, so 8 bits per sub-vector).
+PQ compresses a vector by splitting it into $m$ sub-vectors and replacing each with the id of its nearest centroid in a small codebook trained per sub-space (usually 256 centroids, so 8 bits per sub-vector).
 
-For d = 768, m = 96 sub-vectors of 8 dimensions, 8 bits each:
+For $d = 768$, $m = 96$ sub-vectors of 8 dimensions, 8 bits each:
 
 | Item | Size |
 |---|---|
-| One float32 vector | 768 x 4 = 3,072 bytes |
+| One float32 vector | $768 \times 4 = 3{,}072$ bytes |
 | One PQ code | 96 bytes |
-| Compression | 32x |
-| Codebooks (all vectors share them) | 96 x 256 x 8 x 4 = 786,432 bytes |
+| Compression | $32\times$ |
+| Codebooks (all vectors share them) | $96 \times 256 \times 8 \times 4 = 786{,}432$ bytes |
 | 1M vectors, float32 vs PQ | 3.07 GB vs 96 MB |
 | 100M vectors, float32 vs PQ | 307 GB vs 9.6 GB |
 
-Distances use **asymmetric distance computation (ADC)**: the query stays uncompressed. For each of the m sub-spaces, precompute the distance from the query's sub-vector to each of the 256 centroids, giving an m x 256 table (24,576 entries for m = 96). The distance to any stored vector is then the sum of m table lookups, 96 adds instead of 768 multiply-adds. The table costs the same as scoring 256 x 96 sub-vectors once, which amortises after a few hundred database vectors.
+Distances use **asymmetric distance computation (ADC)**: the query stays uncompressed. For each of the $m$ sub-spaces, precompute the distance from the query's sub-vector to each of the 256 centroids, giving an $m \times 256$ table ($24{,}576$ entries for $m = 96$). The distance to any stored vector is then the sum of $m$ table lookups, 96 adds instead of 768 multiply-adds. The table costs the same as scoring $256 \times 96$ sub-vectors once, which amortises after a few hundred database vectors.
 
-PQ is lossy: vectors sharing codes become indistinguishable, so ranks near the top are noisy. The standard remedy is to retrieve a longer candidate list by PQ distances (for example top 100) and **rescore with the exact vectors** stored on disk or in cheaper memory, then keep the top k. Exercise 4 implements encode, decode, ADC and checks that the ADC distance equals the exact distance to the decoded vector.
+PQ is lossy: vectors sharing codes become indistinguishable, so ranks near the top are noisy. The standard remedy is to retrieve a longer candidate list by PQ distances (for example top 100) and **rescore with the exact vectors** stored on disk or in cheaper memory, then keep the top $k$. Exercise 4 implements encode, decode, ADC and checks that the ADC distance equals the exact distance to the decoded vector.
 
-Related reductions: scalar quantisation to int8 (4x), or binary quantisation with Hamming distance (32x for float32 input, 96 bytes at d = 768), both usually paired with rescoring. IVF-PQ quantises the residual between a vector and its centroid, which makes the codes more precise.
+Related reductions: scalar quantisation to int8 ($4\times$), or binary quantisation with Hamming distance ($32\times$ for float32 input, 96 bytes at $d = 768$), both usually paired with rescoring. IVF-PQ quantises the residual between a vector and its centroid, which makes the codes more precise.
 
 ### Memory budget at a glance
 
-| Representation (d = 768) | Per vector | 1M vectors | 100M vectors |
+| Representation ($d = 768$) | Per vector | 1M vectors | 100M vectors |
 |---|---|---|---|
 | float32 | 3,072 B | 3.07 GB | 307 GB |
 | float16 | 1,536 B | 1.54 GB | 154 GB |
 | int8 | 768 B | 0.77 GB | 77 GB |
-| PQ, m = 96 x 8 bit | 96 B | 96 MB | 9.6 GB |
+| PQ, $m = 96 \times 8$ bit | 96 B | 96 MB | 9.6 GB |
 | Binary (768 bits) | 96 B | 96 MB | 9.6 GB |
-| HNSW graph overhead (M = 16) | ~130-150 B | ~0.15 GB | ~14 GB |
+| HNSW graph overhead ($M = 16$) | ~130-150 B | ~0.15 GB | ~14 GB |
 
 ### Filtering is the hard part
 
 Real queries come with metadata filters: tenant, language, date, ACL group. Three strategies:
 
-1. **Post-filter**: search top-k', then drop rows that fail the filter. If the filter passes a fraction s of the data, you expect k' x s survivors. To get 10 results at s = 1%, you need k' around 1,000, and for very selective filters no k' is safe. Exercise 6 shows a case where post-filtering returns nothing.
+1. **Post-filter**: search the top $k'$, then drop rows that fail the filter. If the filter passes a fraction $s$ of the data, you expect $k' \cdot s$ survivors. To get 10 results at $s = 0.01$ (1%), you need $k'$ around 1,000, and for very selective filters no $k'$ is safe. Exercise 6 shows a case where post-filtering returns nothing.
 2. **Pre-filter**: restrict the candidate set first, then search. Exact on small filtered sets (just brute force the survivors), but a graph index built over all vectors can have its connectivity broken when most nodes are masked out.
-3. **Filter-aware traversal**: the engine checks the predicate during graph walking or list scanning and keeps going until it has k valid results, sometimes building per-filter structures or switching to brute force when the filter is very selective.
+3. **Filter-aware traversal**: the engine checks the predicate during graph walking or list scanning and keeps going until it has $k$ valid results, sometimes building per-filter structures or switching to brute force when the filter is very selective.
 
 For permissions, correctness comes first: the filter must be applied inside retrieval, with the caller's verified identity. Recall under the filter is the secondary concern, and you should measure it separately (recall@k on filtered queries against exact filtered search).
 
 ### Check yourself
 
-1. For N = 4M, nprobe = 16, what nlist minimises distance computations, and what is the cost?
+1. For $N = 4\text{M}$, $\text{nprobe} = 16$, what nlist minimises distance computations, and what is the cost?
 
 <details><summary>Answer</summary>
 
-nlist = sqrt(16 x 4,000,000) = sqrt(64,000,000) = 8,000. Cost = 8,000 + 16 x 4,000,000 / 8,000 = 8,000 + 8,000 = 16,000 distance computations, versus 4,000,000 for brute force (250x fewer). In practice you pick nlist for balance and recall and check it empirically.
+$$\text{nlist} = \sqrt{16 \times 4{,}000{,}000} = \sqrt{64{,}000{,}000} = 8{,}000$$
+
+$$\text{cost} = 8{,}000 + \frac{16 \times 4{,}000{,}000}{8{,}000} = 8{,}000 + 8{,}000 = 16{,}000$$
+
+That is 16,000 distance computations, versus 4,000,000 for brute force ($250\times$ fewer). In practice you pick nlist for balance and recall and check it empirically.
 
 </details>
 
-2. 50M vectors, 1024 dimensions, float16. How much RAM for vectors, and what would PQ with m = 128 x 8 bit take?
+2. 50M vectors, 1024 dimensions, float16. How much RAM for vectors, and what would PQ with $m = 128 \times 8$ bit take?
 
 <details><summary>Answer</summary>
 
-Float16: 50M x 1024 x 2 B = 102.4 GB. PQ: 50M x 128 B = 6.4 GB (a 16x reduction versus float16, 32x versus float32), plus a small codebook. Add whatever you need for a rescoring copy of the vectors if you keep one.
+Float16: $50\text{M} \times 1024 \times 2\ \text{B} = 102.4\ \text{GB}$. PQ: $50\text{M} \times 128\ \text{B} = 6.4\ \text{GB}$ (a $16\times$ reduction versus float16, $32\times$ versus float32), plus a small codebook. Add whatever you need for a rescoring copy of the vectors if you keep one.
 
 </details>
 
@@ -568,52 +585,52 @@ Dense and lexical retrievers fail on different queries. Dense fails on exact str
 
 RRF ignores scores and uses only ranks:
 
-```
-RRF(d) = sum over rankings r of  1 / (k + rank_r(d))      (rank starts at 1, k = 60 by default)
+```math
+\operatorname{RRF}(d) = \sum_{r} \frac{1}{k + \operatorname{rank}_r(d)} \qquad \text{(rank starts at 1, } k = 60 \text{ by default)}
 ```
 
 A document absent from a ranking contributes nothing from it. Worked example, two rankings:
 
-```
+```text
 BM25:   d1, d2, d3, d4
 Dense:  d3, d5, d1, d6
 ```
 
 | Doc | BM25 term | Dense term | RRF |
 |---|---|---|---|
-| d1 | 1/61 = 0.01639 | 1/63 = 0.01587 | 0.03227 |
-| d3 | 1/63 = 0.01587 | 1/61 = 0.01639 | 0.03227 |
-| d2 | 1/62 = 0.01613 | - | 0.01613 |
-| d5 | - | 1/62 = 0.01613 | 0.01613 |
-| d4 | 1/64 = 0.01563 | - | 0.01563 |
-| d6 | - | 1/64 = 0.01563 | 0.01563 |
+| d1 | $1/61 = 0.01639$ | $1/63 = 0.01587$ | 0.03227 |
+| d3 | $1/63 = 0.01587$ | $1/61 = 0.01639$ | 0.03227 |
+| d2 | $1/62 = 0.01613$ | - | 0.01613 |
+| d5 | - | $1/62 = 0.01613$ | 0.01613 |
+| d4 | $1/64 = 0.01563$ | - | 0.01563 |
+| d6 | - | $1/64 = 0.01563$ | 0.01563 |
 
 d1 and d3 tie exactly, because ranks (1, 3) and (3, 1) give the same sum. Both beat documents that appeared in only one list, so agreement between retrievers is rewarded. Your implementation needs a deterministic tie-breaker (for example, best individual rank, or doc id), otherwise results flicker between runs.
 
 ### What the constant k does
 
-k controls how fast the reward decays with rank:
+$k$ controls how fast the reward decays with rank:
 
-| k | 1/(k+1) | 1/(k+2) | 1/(k+10) |
+| $k$ | $1/(k+1)$ | $1/(k+2)$ | $1/(k+10)$ |
 |---|---|---|---|
 | 1 | 0.500 | 0.333 | 0.091 |
 | 10 | 0.091 | 0.083 | 0.050 |
 | 60 | 0.0164 | 0.0161 | 0.0143 |
 
-With k = 1, rank 1 is worth 50% more than rank 2, so a single retriever's top pick dominates the fusion. With k = 60 the curve is flat: rank 1 versus rank 2 differ by 1.6%, so the fused order is driven mostly by how many lists a document appears in. k = 60 is a robust default from the original RRF paper. Lower k favours top-heavy trust in each retriever, higher k favours consensus. Tune on a golden set if you have one, but expect small differences.
+With $k = 1$, rank 1 is worth 50% more than rank 2, so a single retriever's top pick dominates the fusion. With $k = 60$ the curve is flat: rank 1 versus rank 2 differ by 1.6%, so the fused order is driven mostly by how many lists a document appears in. $k = 60$ is a robust default from the original RRF paper. Lower $k$ favours top-heavy trust in each retriever, higher $k$ favours consensus. Tune on a golden set if you have one, but expect small differences.
 
 ### Why not mix scores?
 
-Weighted score fusion, `alpha * norm(bm25) + (1 - alpha) * norm(dense)`, can beat RRF when tuned, but it has real pitfalls. Take four candidates:
+Weighted score fusion, $\alpha \cdot \operatorname{norm}(\text{bm25}) + (1 - \alpha) \cdot \operatorname{norm}(\text{dense})$, can beat RRF when tuned, but it has real pitfalls. Take four candidates:
 
-```
+```text
 BM25 raw:   X 18.2   Y 7.1   Z 6.9   W 6.8
 Cosine:     X 0.60   Y 0.82  Z 0.80  W 0.55
 ```
 
-X has an exact identifier match, giving an outlier BM25 score. Min-max normalise each list to [0, 1] and average with alpha = 0.5:
+X has an exact identifier match, giving an outlier BM25 score. Min-max normalise each list to $[0, 1]$ and average with $\alpha = 0.5$:
 
-```
+```text
 BM25 norm:   X 1.000  Y 0.026  Z 0.009  W 0.000
 Cos norm:    X 0.185  Y 1.000  Z 0.926  W 0.000
 Fused:       X 0.593  Y 0.513  Z 0.467  W 0.000
@@ -621,19 +638,19 @@ Fused:       X 0.593  Y 0.513  Z 0.467  W 0.000
 
 Now change only X's BM25 to 9.0 (Y's raw score is untouched):
 
-```
+```text
 BM25 norm:   X 1.000  Y 0.136  Z 0.045  W 0.000
 Fused:       X 0.593  Y 0.568  Z 0.486  W 0.000
 ```
 
 Y's fused score rose from 0.513 to 0.568 although nothing about Y changed. Min-max makes each document's score depend on the best and worst other documents in the list, and one outlier compresses everyone else. Further problems:
 
-- The score distribution depends on the query (a rare-term query has huge BM25 scores, a stopword-heavy query small ones), so a global alpha fits some queries and not others.
+- The score distribution depends on the query (a rare-term query has huge BM25 scores, a stopword-heavy query small ones), so a global $\alpha$ fits some queries and not others.
 - Top-k lists have only the candidates each retriever returned, so min and max come from a truncated list that varies by query.
 - Z-score normalisation reduces but does not remove the issue, and assumes roughly Gaussian scores.
-- Mixed units hide a mis-calibration bug: an alpha tuned on one corpus does not transfer when the embedder or the BM25 analyser changes.
+- Mixed units hide a mis-calibration bug: an $\alpha$ tuned on one corpus does not transfer when the embedder or the BM25 analyser changes.
 
-RRF has its own costs: it throws away score magnitude (a confident, huge BM25 margin counts the same as a marginal one), and it behaves oddly if one input list is noise, since its ranks still add. A useful middle path is **weighted RRF** (`w_r / (k + rank)`), or fusing scores only after calibrating each retriever on labelled data. The usual order of preference: RRF as the default, weighted RRF once a golden set shows one leg deserves more weight, learned score fusion only when you have enough labelled queries to justify it.
+RRF has its own costs: it throws away score magnitude (a confident, huge BM25 margin counts the same as a marginal one), and it behaves oddly if one input list is noise, since its ranks still add. A useful middle path is **weighted RRF**, which scores each list as $w_r / (k + \operatorname{rank})$, or fusing scores only after calibrating each retriever on labelled data. The usual order of preference: RRF as the default, weighted RRF once a golden set shows one leg deserves more weight, learned score fusion only when you have enough labelled queries to justify it.
 
 ### Operational notes
 
@@ -644,19 +661,19 @@ RRF has its own costs: it throws away score magnitude (a confident, huge BM25 ma
 
 ### Check yourself
 
-1. With k = 60, a document is rank 1 in list A only. Another is rank 5 in both lists A and B. Which wins?
+1. With $k = 60$, a document is rank 1 in list A only. Another is rank 5 in both lists A and B. Which wins?
 
 <details><summary>Answer</summary>
 
-Doc 1: 1/61 = 0.01639. Doc 2: 2/65 = 0.03077. The document found by both lists wins. RRF rewards consensus when k is large.
+Doc 1: $1/61 = 0.01639$. Doc 2: $2/65 = 0.03077$. The document found by both lists wins. RRF rewards consensus when $k$ is large.
 
 </details>
 
-2. What happens to RRF as k approaches infinity? As k approaches 0?
+2. What happens to RRF as $k$ approaches infinity? As $k$ approaches 0?
 
 <details><summary>Answer</summary>
 
-As k grows every rank contributes almost the same amount, so the score is dominated by the number of lists a document appears in (ties broken by small rank differences). As k approaches 0 the score becomes 1/rank, so rank 1 in any list dominates, and the fusion behaves like a top-heavy vote.
+As $k$ grows every rank contributes almost the same amount, so the score is dominated by the number of lists a document appears in (ties broken by small rank differences). As $k$ approaches 0 the score becomes $1/\text{rank}$, so rank 1 in any list dominates, and the fusion behaves like a top-heavy vote.
 
 </details>
 
@@ -696,27 +713,27 @@ flowchart LR
 
 ### Cross-encoders
 
-A cross-encoder concatenates `[query] [SEP] [document]` and runs one transformer pass with full attention across both, then a head outputs a relevance score. Every query token can attend to every document token, so it can see that "not" negates a clause or that two constraints are satisfied in different sentences. Nothing can be precomputed: each (query, candidate) pair is a fresh forward pass. Reranking 100 candidates of 256 tokens means 100 x 256 = 25,600 tokens through the model per query, versus one short pass for a bi-encoder query. That is why rerankers only touch the top ~50-200 and add roughly 50-300 ms depending on model size and hardware. LLM-based listwise rerankers (the model reads many candidates and outputs an order) are stronger on hard queries but cost more and carry position bias.
+A cross-encoder concatenates `[query] [SEP] [document]` and runs one transformer pass with full attention across both, then a head outputs a relevance score. Every query token can attend to every document token, so it can see that "not" negates a clause or that two constraints are satisfied in different sentences. Nothing can be precomputed: each (query, candidate) pair is a fresh forward pass. Reranking 100 candidates of 256 tokens means $100 \times 256 = 25{,}600$ tokens through the model per query, versus one short pass for a bi-encoder query. That is why rerankers only touch the top ~50-200 and add roughly 50-300 ms depending on model size and hardware. LLM-based listwise rerankers (the model reads many candidates and outputs an order) are stronger on hard queries but cost more and carry position bias.
 
 The funnel arithmetic: the reranker can only reorder what the first stage returned. If first-stage recall@100 is 0.92, then the best final recall@10 is at most 0.92, and often the rerank step moves recall@10 from, say, 0.70 to 0.85 by pulling relevant items from ranks 11-100 up. Measure recall at the first-stage depth separately from the final-k metrics, otherwise you cannot tell which stage to fix.
 
 ### ColBERT late interaction
 
-ColBERT keeps one embedding per token. The query has n_q token vectors Q_i and a document has n_d token vectors D_j (normalised). The score is MaxSim:
+ColBERT keeps one embedding per token. The query has $n_q$ token vectors $Q_i$ and a document has $n_d$ token vectors $D_j$ (normalised). The score is MaxSim:
 
-```
-score(Q, D) = sum over i of  max over j of  dot(Q_i, D_j)
+```math
+\operatorname{score}(Q, D) = \sum_{i=1}^{n_q} \max_{1 \le j \le n_d} \operatorname{dot}(Q_i, D_j)
 ```
 
 Each query token picks its best match anywhere in the document, and the matches are summed. Document token vectors are computed offline, so only the query is encoded at search time, but scoring is token-level. Exercise 5 implements this.
 
-Worked example. Query tokens are e0 and e1 (unit axes). Document A has tokens e0, e1, e5, e6. Document B has four copies of (e0 + e1)/sqrt(2).
+Worked example. Query tokens are $e_0$ and $e_1$ (unit axes). Document A has tokens $e_0, e_1, e_5, e_6$. Document B has four copies of $(e_0 + e_1)/\sqrt{2}$.
 
-- MaxSim(Q, A) = 1 + 1 = 2.0 (each query token has an exact match).
-- MaxSim(Q, B) = 0.707 + 0.707 = 1.414.
-- A single mean-pooled vector reverses the order: the mean of B equals the mean of the query direction, cosine 1.0, while A's mean is diluted by e5 and e6, cosine 0.707.
+- $\operatorname{MaxSim}(Q, A) = 1 + 1 = 2.0$ (each query token has an exact match).
+- $\operatorname{MaxSim}(Q, B) = 0.707 + 0.707 = 1.414$.
+- A single mean-pooled vector reverses the order: the mean of B equals the mean of the query direction, cosine 1.0, while A's mean is diluted by $e_5$ and $e_6$, cosine 0.707.
 
-MaxSim rewards a document that contains each needed concept somewhere, regardless of what else it contains, and the per-token maxima show *why* a document matched, which helps debugging. The cost is storage: 1M documents x 200 tokens x 128 dimensions x 2 bytes (float16) = 51.2 GB, against 256 MB for one 128-dimension vector per document, a 200x ratio. Practical systems prune tokens, quantise and cluster token vectors, and use a cheap candidate-generation step before full MaxSim. The same idea over page-image patches is the basis of visual document retrievers.
+MaxSim rewards a document that contains each needed concept somewhere, regardless of what else it contains, and the per-token maxima show *why* a document matched, which helps debugging. The cost is storage: $1\text{M documents} \times 200\ \text{tokens} \times 128\ \text{dimensions} \times 2\ \text{bytes} = 51.2\ \text{GB}$ in float16, against 256 MB for one 128-dimension vector per document, a $200\times$ ratio. Practical systems prune tokens, quantise and cluster token vectors, and use a cheap candidate-generation step before full MaxSim. The same idea over page-image patches is the basis of visual document retrievers.
 
 ### Check yourself
 
@@ -760,19 +777,19 @@ The index holds chunks, so the chunk is the unit of retrieval. If the evidence f
 
 ### Coverage arithmetic for fixed windows
 
-Suppose the evidence needed to answer is a span of s tokens at a random position, and the chunker uses windows of c tokens with stride t (overlap = c - t). The span is fully inside at least one chunk with probability about
+Suppose the evidence needed to answer is a span of $s$ tokens at a random position, and the chunker uses windows of $c$ tokens with stride $t$ (overlap $= c - t$). The span is fully inside at least one chunk with probability about
 
-```
-P(contained) = min(1, (c - s) / t)
+```math
+P(\text{contained}) = \min\left(1, \frac{c - s}{t}\right)
 ```
 
-| c | overlap | stride t | span s | P(contained) |
+| $c$ | overlap | stride $t$ | span $s$ | $P(\text{contained})$ |
 |---|---|---|---|---|
 | 256 | 0 | 256 | 100 | ~0.61 |
 | 256 | 50 | 206 | 100 | ~0.76 |
 | 256 | 128 | 128 | 100 | 1.00 |
 
-Overlap at least equal to the longest span you need guarantees containment: c - t >= s. The price is index size multiplied by `c / t`: 50% overlap doubles chunk count, storage and embedding cost. 20% overlap costs 1.25x. This is the real justification for the "10-20% overlap" rule of thumb, and the reason overlap does not substitute for respecting structure.
+Overlap at least equal to the longest span you need guarantees containment: $c - t \ge s$. The price is index size multiplied by $c / t$: 50% overlap doubles chunk count, storage and embedding cost. 20% overlap costs $1.25\times$. This is the real justification for the "10-20% overlap" rule of thumb, and the reason overlap does not substitute for respecting structure.
 
 ### Structure beats size
 
@@ -802,7 +819,7 @@ Sweep chunk size (for example 128, 256, 512, 1024) and overlap on your golden se
 
 <details><summary>Answer</summary>
 
-Overlap >= 150 tokens, so stride <= 250. The chunk count multiplier is 400/250 = 1.6x.
+Overlap $\ge 150$ tokens, so stride $\le 250$. The chunk count multiplier is $400/250 = 1.6\times$.
 
 </details>
 
@@ -845,7 +862,7 @@ Questions and answers sit at different places in embedding space: "How long do I
 
 ### Multi-query and fusion
 
-Say you generate four paraphrases and retrieve the top 20 for each plus the original. RRF over five lists rewards documents that appear across paraphrases, which suppresses single-paraphrase noise. A document found by only one paraphrase at rank 1 scores 1/61 = 0.0164, while a document at rank 8 in all five scores 5/68 = 0.0735 and wins. Multi-query costs 5x retrieval load and one generation call, so cache transformations for popular queries.
+Say you generate four paraphrases and retrieve the top 20 for each plus the original. RRF over five lists rewards documents that appear across paraphrases, which suppresses single-paraphrase noise. A document found by only one paraphrase at rank 1 scores $1/61 = 0.0164$, while a document at rank 8 in all five scores $5/68 = 0.0735$ and wins. Multi-query costs $5\times$ retrieval load and one generation call, so cache transformations for popular queries.
 
 ### Metadata extraction
 
@@ -887,16 +904,18 @@ From the verified caller identity on the server side, applied outside and after 
 
 ### The metrics
 
-Let a ranking list documents best first and R be the set of relevant documents for a query.
+Let a ranking list documents best first and $R$ be the set of relevant documents for a query.
 
-```
-recall@k       = |top-k intersect R| / |R|
-precision@k    = |top-k intersect R| / k
-RR             = 1 / rank of first relevant item (0 if none); MRR = mean over queries
-AP             = (1/|R|) * sum over ranks i where item i is relevant of precision@i
-DCG@k          = sum over i=1..k of gain_i / log2(i + 1)
-nDCG@k         = DCG@k / DCG@k of the ideal ordering
-gain           = grade, or 2^grade - 1 (exponential, emphasises top grades)
+```math
+\begin{aligned}
+\text{recall@}k &= \frac{\lvert \text{top-}k \cap R \rvert}{\lvert R \rvert} \\
+\text{precision@}k &= \frac{\lvert \text{top-}k \cap R \rvert}{k} \\
+\text{RR} &= \frac{1}{\text{rank of first relevant item}} \quad (0 \text{ if none}), \qquad \text{MRR} = \text{mean of RR over queries} \\
+\text{AP} &= \frac{1}{\lvert R \rvert} \sum_{i \,:\, \text{item } i \text{ is relevant}} \text{precision@}i \\
+\text{DCG@}k &= \sum_{i=1}^{k} \frac{\text{gain}_i}{\log_2(i + 1)} \\
+\text{nDCG@}k &= \frac{\text{DCG@}k}{\text{DCG@}k \text{ of the ideal ordering}} \\
+\text{gain} &= \text{grade}, \ \text{or } 2^{\text{grade}} - 1 \quad \text{(exponential, emphasises top grades)}
+\end{aligned}
 ```
 
 Choose by question. **Recall@k** answers "is the evidence in what the generator will see?" and is the headline for the retrieval stage. **MRR** suits single-answer lookups where the first hit matters. **nDCG** suits graded relevance and ranked lists the user or reranker consumes. Precision@k matters when context budget is tight and irrelevant chunks hurt the generator.
@@ -905,19 +924,20 @@ Choose by question. **Recall@k** answers "is the evidence in what the generator 
 
 Five documents are returned in this order with graded relevance 3, 2, 3, 0, 1 (ideal order: 3, 3, 2, 1, 0).
 
+```math
+\begin{aligned}
+&\text{Linear gain:} \\
+\text{DCG} &= \frac{3}{\log_2 2} + \frac{2}{\log_2 3} + \frac{3}{\log_2 4} + \frac{0}{\log_2 5} + \frac{1}{\log_2 6} \\
+&= 3 + 1.2619 + 1.5 + 0 + 0.3869 = 6.1488 \\
+\text{IDCG} &= 3 + \frac{3}{\log_2 3} + \frac{2}{\log_2 4} + \frac{1}{\log_2 5} + 0 \\
+&= 3 + 1.8928 + 1.0 + 0.4307 = 6.3235 \\
+\text{nDCG} &= 6.1488 / 6.3235 = 0.9724 \\[6pt]
+&\text{Exponential gain (7, 3, 7, 0, 1 versus ideal 7, 7, 3, 1, 0):} \\
+\text{DCG} &= 12.7796, \quad \text{IDCG} = 13.3472, \quad \text{nDCG} = 0.9575
+\end{aligned}
 ```
-Linear gain:
-DCG   = 3/log2(2) + 2/log2(3) + 3/log2(4) + 0/log2(5) + 1/log2(6)
-      = 3 + 1.2619 + 1.5 + 0 + 0.3869 = 6.1488
-IDCG  = 3 + 3/log2(3) + 2/log2(4) + 1/log2(5) + 0
-      = 3 + 1.8928 + 1.0 + 0.4307 = 6.3235
-nDCG  = 6.1488 / 6.3235 = 0.9724
 
-Exponential gain (7, 3, 7, 0, 1 versus ideal 7, 7, 3, 1, 0):
-DCG = 12.7796, IDCG = 13.3472, nDCG = 0.9575
-```
-
-The exponential version punishes the same ordering error slightly more, because putting a grade-2 document above a grade-3 one costs 4 gain points instead of 1. MRR example: three queries whose first relevant hits are at ranks 1, 3 and none: (1 + 1/3 + 0) / 3 = 0.444. Average precision for relevant items at ranks 1 and 3 with one more relevant never retrieved: (1/1 + 2/3) / 3 = 0.556. Exercise 1 reproduces all of these.
+The exponential version punishes the same ordering error slightly more, because putting a grade-2 document above a grade-3 one costs 4 gain points instead of 1. MRR example: three queries whose first relevant hits are at ranks 1, 3 and none: $(1 + 1/3 + 0) / 3 = 0.444$. Average precision for relevant items at ranks 1 and 3 with one more relevant never retrieved: $(1/1 + 2/3) / 3 = 0.556$. Exercise 1 reproduces all of these.
 
 Two common mistakes: building the ideal DCG only from retrieved documents (it must use all graded documents, including ones the system missed), and forgetting that recall's denominator is the number of relevant items, which can exceed k.
 
@@ -925,14 +945,14 @@ Two common mistakes: building the ideal DCG only from retrieved documents (it mu
 
 Start with 50-100 real queries from logs, or LLM-generated questions per chunk (check them for lexical leakage: questions that copy the chunk's wording make BM25 look too good). Label with a pooled approach: take the union of top results from several retrievers and judge those, since judging only one system's output biases toward it. Record the corpus version.
 
-Sampling noise matters at this size. For recall = 0.80 over 100 queries, the standard error is sqrt(0.8 x 0.2 / 100) = 0.04, so a 95% interval is about +-0.08. A 3-point change is noise. Compare two systems on the same queries and look at per-query wins and losses (paired comparison), or bootstrap the mean difference, before claiming improvement. 400 queries halve the interval to +-0.04.
+Sampling noise matters at this size. For $\text{recall} = 0.80$ over 100 queries, the standard error is $\sqrt{0.8 \times 0.2 / 100} = 0.04$, so a 95% interval is about $\pm 0.08$. A 3-point change is noise. Compare two systems on the same queries and look at per-query wins and losses (paired comparison), or bootstrap the mean difference, before claiming improvement. 400 queries halve the interval to $\pm 0.04$.
 
 ### What to track
 
 - Recall@k at every handoff depth: first stage (100), after fusion, after rerank (10-20).
 - Slice by query type (identifier, natural language, multi-hop), tenant and language. Averages hide regressions.
 - Recall under filters, against exact filtered search, for the ANN recall question from Part 4.
-- Latency percentiles next to quality. A 2-point nDCG gain at 3x p95 latency is often not worth it.
+- Latency percentiles next to quality. A 2-point nDCG gain at $3\times$ p95 latency is often not worth it.
 
 ### Check yourself
 
@@ -940,7 +960,7 @@ Sampling noise matters at this size. For recall = 0.80 over 100 queries, the sta
 
 <details><summary>Answer</summary>
 
-recall@5 = 2/4 = 0.5, precision@5 = 2/5 = 0.4.
+$\text{recall@}5 = 2/4 = 0.5$, $\text{precision@}5 = 2/5 = 0.4$.
 
 </details>
 
@@ -948,7 +968,7 @@ recall@5 = 2/4 = 0.5, precision@5 = 2/5 = 0.4.
 
 <details><summary>Answer</summary>
 
-recall@5 = 1/2 = 0.5. DCG = 1. The ideal DCG@5 = 1 + 1/log2(3) = 1.631, so nDCG@5 = 0.613. Missing documents lower nDCG only because the ideal list is built from all graded documents.
+$\text{recall@}5 = 1/2 = 0.5$. $\text{DCG} = 1$. The ideal $\text{DCG@}5 = 1 + 1/\log_2 3 = 1.631$, so $\text{nDCG@}5 = 0.613$. Missing documents lower nDCG only because the ideal list is built from all graded documents.
 
 </details>
 
@@ -974,7 +994,7 @@ For a bad answer, ask whether the gold chunk was in the model's context. No: ret
 
 ### Measures
 
-- **Faithfulness (groundedness).** Decompose the answer into atomic claims, then judge each against the retrieved context as supported, contradicted or not found. Faithfulness = supported claims / total claims. Example: an answer with 8 claims, 6 supported, 1 contradicted, 1 unsupported scores 0.75, and the two failures are the actionable items.
+- **Faithfulness (groundedness).** Decompose the answer into atomic claims, then judge each against the retrieved context as supported, contradicted or not found. $\text{faithfulness} = \text{supported claims} / \text{total claims}$. Example: an answer with 8 claims, 6 supported, 1 contradicted, 1 unsupported scores 0.75, and the two failures are the actionable items.
 - **Answer relevance.** Does the answer address the question, regardless of grounding?
 - **Context precision and recall.** What share of the context was useful, and did the context contain everything needed? These connect generation back to retrieval metrics.
 - **Citation correctness.** Citation precision: of the cited chunks, how many support the sentence they are attached to. Citation recall: of the claims that need support, how many have a citation.
@@ -1042,7 +1062,7 @@ flowchart TD
 
 1. **Start from the failure budget.** Quality is lost mostly in parsing, chunking and first-stage recall (Parts 7, 5, 4), so spend time there before vector database comparisons.
 2. **Pick scoring by the query mix.** Identifier-heavy traffic needs BM25 (Part 2) and hybrid fusion (Part 5). Paraphrase-heavy traffic leans on the embedder (Parts 1, 3), and a jargon-heavy domain justifies fine-tuning it.
-3. **Size the index with arithmetic.** State vectors x dimension x bytes, add graph or code overhead, and name the lever (HNSW with higher M, IVF-PQ plus rescoring, Matryoshka truncation) with its recall cost (Part 4).
+3. **Size the index with arithmetic.** State $\text{vectors} \times \text{dimension} \times \text{bytes}$, add graph or code overhead, and name the lever (HNSW with higher M, IVF-PQ plus rescoring, Matryoshka truncation) with its recall cost (Part 4).
 4. **Fix the funnel depths.** Retrieve broadly, fuse, rerank, pass few chunks. Report recall at each handoff (Parts 6, 9).
 5. **Apply permissions in retrieval**, on every leg, from verified identity, and again at context assembly (Parts 4, 5, 7).
 6. **Evaluate in two layers.** Retrieval metrics on a golden set with confidence intervals (Part 9), then faithfulness and citation checks (Part 10). Triage each bad answer to retrieval or generation before changing anything.

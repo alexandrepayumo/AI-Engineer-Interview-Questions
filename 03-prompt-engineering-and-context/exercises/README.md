@@ -42,7 +42,13 @@ Writes cost 2x the input price for a 1-hour TTL and reads cost 0.1x. What hit ra
 
 <details><summary>Model answer</summary>
 
-Solve h * 0.1 + (1 - h) * 2.0 = 1, so h = (2 - 1) / (2 - 0.1) = 1 / 1.9, about 52.6%. With one request per 90 minutes on average and a 60-minute TTL, a Poisson model gives a hit probability of 1 - exp(-60/90) = 1 - 0.513 = about 49%, which is below break-even, so the 1-hour TTL loses money. Without caching you pay 1x. With the 5-minute TTL you would almost never hit and pay 1.25x on every request, which is worse. The right answer here is to not cache, or to batch requests so they arrive closer together.
+Solve for the hit rate $h$ at which the cached cost equals the uncached cost:
+
+$$0.1 h + 2.0 (1 - h) = 1 \quad \Longrightarrow \quad h = \frac{2 - 1}{2 - 0.1} = \frac{1}{1.9} \approx 0.526$$
+
+That is a hit rate of about 52.6%.
+
+With one request per 90 minutes on average and a 60-minute TTL, a Poisson model gives a hit probability of $1 - \exp(-60/90) = 1 - 0.513 \approx 0.49$, or about 49%, which is below break-even, so the 1-hour TTL loses money. Without caching you pay 1x. With the 5-minute TTL you would almost never hit and pay 1.25x on every request, which is worse. The right answer here is to not cache, or to batch requests so they arrive closer together.
 
 </details>
 
@@ -72,7 +78,15 @@ A task has a single-integer answer and a single-sample accuracy of 62%. You can 
 
 <details><summary>Model answer</summary>
 
-Under independence with wrong answers never agreeing, the majority of 5 is right when at least 3 are right: sum over i = 3..5 of C(5,i) 0.62^i 0.38^(5-i) = 10(0.2383)(0.1444) + 5(0.1478)(0.38) + 0.0916 = 0.3441 + 0.2809 + 0.0916, about 0.717. So roughly +10 points on paper. Real gains are smaller because samples from one model at one temperature are positively correlated (the same misconception recurs, so errors agree), and because wrong answers often cluster on the same wrong value, which lets a wrong majority win. A 5x cost for a few points may lose to a better prompt, a stronger model or a verifier.
+Under independence with wrong answers never agreeing, the majority of 5 is right when at least 3 are right:
+
+$$P(\text{majority correct}) = \sum_{i=3}^{5} \binom{5}{i} 0.62^i \thinspace 0.38^{5-i}$$
+
+$$= 10 (0.2383)(0.1444) + 5 (0.1478)(0.38) + 0.0916$$
+
+$$= 0.3441 + 0.2808 + 0.0916 \approx 0.717$$
+
+So roughly +10 points on paper. Real gains are smaller because samples from one model at one temperature are positively correlated (the same misconception recurs, so errors agree), and because wrong answers often cluster on the same wrong value, which lets a wrong majority win. A 5x cost for a few points may lose to a better prompt, a stronger model or a verifier.
 
 </details>
 
@@ -92,7 +106,7 @@ Prompt B beats prompt A on 100 cases. The discordant cases: B right and A wrong 
 
 <details><summary>Model answer</summary>
 
-The net gain is 7 cases (7 points). A paired test looks only at the 17 discordant cases: z = (12 - 5) / sqrt(12 + 5) = 7 / 4.12 = 1.70, a two-sided p of about 0.09. That is suggestive, not conclusive at the usual 5% level. Next steps: grow the eval set (especially in the area where B differs), inspect the 17 discordant cases for a pattern, run multiple samples per case if the model is stochastic, and check cost and latency. Ship behind a canary with guardrail metrics if the pattern makes sense.
+The net gain is 7 cases (7 points). A paired test looks only at the 17 discordant cases: $z = (12 - 5) / \sqrt{12 + 5} = 7 / 4.12 = 1.70$, a two-sided p of about 0.09. That is suggestive, not conclusive at the usual 5% level. Next steps: grow the eval set (especially in the area where B differs), inspect the 17 discordant cases for a pattern, run multiple samples per case if the model is stochastic, and check cost and latency. Ship behind a canary with guardrail metrics if the pattern makes sense.
 
 </details>
 

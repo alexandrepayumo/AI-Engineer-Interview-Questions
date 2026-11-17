@@ -21,7 +21,7 @@ Further practice that overlaps this topic but is not repeated here: [a basic age
 | 4 | `ex04_plan_execute.py` | Medium | Plan-and-execute, replanning with completed work, separate retry and replan budgets (Part 3) | 45 min |
 | 5 | `ex05_agent_memory.py` | Medium | Recency, relevance and importance scoring, decay with half-life, reinforcement, pruning (Part 5) | 60 min |
 | 6 | `ex06_taint_guard.py` | Hard | Capability guard with taint tracking, lethal trifecta, egress allowlist, approval tiers (Part 9) | 75 min |
-| 7 | `ex07_pass_k.py` | Medium | Unbiased pass@k and pass^k estimators, aggregation over tasks, Wilson intervals (Part 10) | 45 min |
+| 7 | `ex07_pass_k.py` | Medium | Unbiased pass@k and $\text{pass}^k$ estimators, aggregation over tasks, Wilson intervals (Part 10) | 45 min |
 
 Suggested order: 1, 2, 4, 3, 5, 6, 7.
 
@@ -31,11 +31,15 @@ Attempt each before opening the answer. Use a calculator only for powers and log
 
 ### P1. Loop cost with and without caching
 
-A loop has a fixed prefix of S = 6,000 tokens (system prompt and tool definitions). Each step adds t = 1,500 tokens. It makes 12 calls. Compute the total input tokens without caching, then the effective cost in full-price token equivalents if cached reads cost 10% of the normal rate.
+A loop has a fixed prefix of $S = 6{,}000$ tokens (system prompt and tool definitions). Each step adds $t = 1{,}500$ tokens. It makes 12 calls. Compute the total input tokens without caching, then the effective cost in full-price token equivalents if cached reads cost 10% of the normal rate.
 
 <details><summary>Answer</summary>
 
-Without caching: 12 x 6,000 + 1,500 x (12 x 11 / 2) = 72,000 + 99,000 = 171,000 tokens. With caching, only new tokens are uncached: 6,000 + 11 x 1,500 = 22,500. Cached reads = 171,000 - 22,500 = 148,500, which cost 14,850 equivalents. Total = 22,500 + 14,850 = 37,350, about 4.6x cheaper. The saving depends on a byte-stable prefix. Changing anything near the top of the prompt each turn removes it.
+Without caching:
+
+$$12 \times 6{,}000 + 1{,}500 \times \frac{12 \times 11}{2} = 72{,}000 + 99{,}000 = 171{,}000 \text{ tokens}$$
+
+With caching, only new tokens are uncached: $6{,}000 + 11 \times 1{,}500 = 22{,}500$. Cached reads $= 171{,}000 - 22{,}500 = 148{,}500$, which cost $14{,}850$ equivalents. Total $= 22{,}500 + 14{,}850 = 37{,}350$, about 4.6x cheaper. The saving depends on a byte-stable prefix. Changing anything near the top of the prompt each turn removes it.
 
 </details>
 
@@ -45,7 +49,7 @@ Per-step success is 0.97. (a) What is the 12-step success rate? (b) A recovery m
 
 <details><summary>Answer</summary>
 
-(a) 0.97^12 = 0.694. (b) The effective step failure is 0.03 x 0.3 = 0.009, so p = 0.991 and 0.991^12 = 0.897. (c) 0.97^6 = 0.833. (d) 0.991^6 = 0.947. Recovery helps more than consolidation here, and the two combine. Real failures correlate, so treat these as upper estimates and measure end-to-end.
+(a) $0.97^{12} = 0.694$. (b) The effective step failure is $0.03 \times 0.3 = 0.009$, so $p = 0.991$ and $0.991^{12} = 0.897$. (c) $0.97^6 = 0.833$. (d) $0.991^6 = 0.947$. Recovery helps more than consolidation here, and the two combine. Real failures correlate, so treat these as upper estimates and measure end-to-end.
 
 </details>
 
@@ -65,7 +69,7 @@ Tasks and durations: a = 2, b = 3, c = 1, d = 4, e = 2. Dependencies: c needs a,
 
 <details><summary>Answer</summary>
 
-Levels: [a, b], [c, d], [e]. Critical path: a -> d = 6, a -> c -> e = 5, b -> e = 5, so 6. Total work is 12, so with 2 workers the lower bound is max(6, 12 / 2) = 6. Alphabetical greedy: at t = 0 start a and b. At t = 2, a finishes and both c and d are ready but only one worker is free, so c starts (finishes at 3). At t = 3, b and c are done, d starts (finishes at 7), e starts at 3 (finishes at 5). Makespan = 7. Starting d first at t = 2 (a rule that prioritises the longest remaining path) gives d finishing at 6, c running on the other worker from 3 to 4, e from 4 to 6, so the makespan is 6, equal to the lower bound. Order matters when workers are scarce, so schedulers prioritise by critical-path length.
+Levels: [a, b], [c, d], [e]. Critical path: $a \to d = 6$, $a \to c \to e = 5$, $b \to e = 5$, so 6. Total work is 12, so with 2 workers the lower bound is $\max(6, 12/2) = 6$. Alphabetical greedy: at $t = 0$ start a and b. At $t = 2$, a finishes and both c and d are ready but only one worker is free, so c starts (finishes at 3). At $t = 3$, b and c are done, d starts (finishes at 7), e starts at 3 (finishes at 5). Makespan = 7. Starting d first at $t = 2$ (a rule that prioritises the longest remaining path) gives d finishing at 6, c running on the other worker from 3 to 4, e from 4 to 6, so the makespan is 6, equal to the lower bound. Order matters when workers are scarce, so schedulers prioritise by critical-path length.
 
 </details>
 
@@ -75,7 +79,7 @@ Half-life 5, weights (1, 1, 1), now = 20, query vector fixed. Memory A: last acc
 
 <details><summary>Answer</summary>
 
-Recency: A = 0.5^(5/5) = 0.5, B = 0.5^(20/5) = 0.0625, C = 0.5^(1/5) = 0.871. Scores: A = 0.5 + 0.9 + 0.2 = 1.6. B = 0.0625 + 0.6 + 0.9 = 1.5625. C = 0.871 + 0.3 + 0.1 = 1.271. Order: A, B, C. After B is retrieved, its last access becomes 20, so its recency is 1.0 and its score is 1 + 0.6 + 0.9 = 2.5, which puts it first. Reinforcement is a feedback loop: whatever gets retrieved becomes more retrievable. That is usually desirable, but it can lock in a stale fact, so contradictions need explicit handling.
+Recency: A $= 0.5^{5/5} = 0.5$, B $= 0.5^{20/5} = 0.0625$, C $= 0.5^{1/5} = 0.871$. Scores: A $= 0.5 + 0.9 + 0.2 = 1.6$. B $= 0.0625 + 0.6 + 0.9 = 1.5625$. C $= 0.871 + 0.3 + 0.1 = 1.271$. Order: A, B, C. After B is retrieved, its last access becomes 20, so its recency is 1.0 and its score is $1 + 0.6 + 0.9 = 2.5$, which puts it first. Reinforcement is a feedback loop: whatever gets retrieved becomes more retrievable. That is usually desirable, but it can lock in a stale fact, so contradictions need explicit handling.
 
 </details>
 
@@ -91,11 +95,11 @@ All three: private data (the repo), untrusted content (web pages, and also third
 
 ### P7. Reliability metrics from trial counts
 
-Five tasks were run 4 times each with these success counts: 4, 4, 3, 2, 0. Compute pass@1, pass@2, pass^2 and pass^4, averaged over tasks.
+Five tasks were run 4 times each with these success counts: 4, 4, 3, 2, 0. Compute pass@1, pass@2, $\text{pass}^2$ and $\text{pass}^4$, averaged over tasks.
 
 <details><summary>Answer</summary>
 
-pass@1 = (1 + 1 + 0.75 + 0.5 + 0) / 5 = 0.65. pass^2 = mean of C(c,2)/C(4,2) with C(4,2) = 6: (1 + 1 + 3/6 + 1/6 + 0) / 5 = 2.667 / 5 = 0.533. pass^4 is 1 only for the tasks with c = 4, so 2/5 = 0.4. pass@2 = 1 - C(4-c, 2)/6 per task: 1, 1, 1 (only one failure exists), 1 - 1/6 = 0.833, 0, so the mean is 3.833 / 5 = 0.767. The 0.65 to 0.40 drop shows how fast consistency decays.
+$\text{pass@}1 = (1 + 1 + 0.75 + 0.5 + 0)/5 = 0.65$. $\text{pass}^2$ = mean of $\binom{c}{2}/\binom{4}{2}$ with $\binom{4}{2} = 6$: $(1 + 1 + 3/6 + 1/6 + 0)/5 = 2.667/5 = 0.533$. $\text{pass}^4$ is 1 only for the tasks with $c = 4$, so $2/5 = 0.4$. $\text{pass@}2 = 1 - \binom{4 - c}{2}/6$ per task: 1, 1, 1 (only one failure exists), $1 - 1/6 = 0.833$, 0, so the mean is $3.833/5 = 0.767$. The 0.65 to 0.40 drop shows how fast consistency decays.
 
 </details>
 
@@ -125,6 +129,6 @@ A research task needs four independent investigations. Each reads about 80,000 t
 
 <details><summary>Answer</summary>
 
-A single agent would accumulate 4 x 80,000 = 320,000 tokens of reading, which exceeds the 200,000 window, so it needs aggressive clearing or compaction mid-task and risks losing detail. With four workers, each uses its own 80,000-token context. The orchestrator's context grows by 4 x 1,200 = 4,800 tokens. Total tokens processed is still at least 320,000 plus overhead, so cost is not lower, and multi-agent runs often cost several times a single chat. The gain is isolation and parallel wall-clock time, and it pays off only if the answer quality justifies the spend.
+A single agent would accumulate $4 \times 80{,}000 = 320{,}000$ tokens of reading, which exceeds the 200,000 window, so it needs aggressive clearing or compaction mid-task and risks losing detail. With four workers, each uses its own 80,000-token context. The orchestrator's context grows by $4 \times 1{,}200 = 4{,}800$ tokens. Total tokens processed is still at least 320,000 plus overhead, so cost is not lower, and multi-agent runs often cost several times a single chat. The gain is isolation and parallel wall-clock time, and it pays off only if the answer quality justifies the spend.
 
 </details>

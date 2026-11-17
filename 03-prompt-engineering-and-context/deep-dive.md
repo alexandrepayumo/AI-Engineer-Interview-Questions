@@ -40,8 +40,8 @@ A pretrained language model has fixed weights. After deployment you cannot chang
 
 An autoregressive model computes a distribution over the next token given everything before it:
 
-```text
-P(y_1 ... y_n | prompt) = product over t of P(y_t | prompt, y_1 ... y_{t-1})
+```math
+P(y_1 \dots y_n \mid \text{prompt}) = \prod_{t} P(y_t \mid \text{prompt}, y_1 \dots y_{t-1})
 ```
 
 A "prompt" is nothing more than the conditioning prefix. Changing the prefix changes the distribution over continuations. A model trained on a large, diverse corpus has seen text shaped like "Translate to French: ... " followed by a translation, text shaped like Q/A forums, text shaped like code with a docstring above it. A good prompt makes the intended document type the most probable one, and the continuation follows.
@@ -54,11 +54,11 @@ Few-shot prompting is the clearest demonstration. Give three input/output pairs 
 
 **The inference view.** One formal account (Xie et al., 2021) treats pretraining documents as generated from latent "concepts" (a topic, a format, a task). Given a prompt, the model implicitly infers which concept generated it and predicts accordingly:
 
-```text
-P(y | prompt) = sum over concepts c of P(y | c, prompt) * P(c | prompt)
+```math
+P(y \mid \text{prompt}) = \sum_{c} P(y \mid c, \text{prompt}) \, P(c \mid \text{prompt})
 ```
 
-Demonstrations sharpen `P(c | prompt)`. Each example is evidence about which task is being performed, which label set is in play and what the output format looks like. More examples concentrate the posterior; contradictory examples spread it.
+Demonstrations sharpen $P(c \mid \text{prompt})$. Each example is evidence about which task is being performed, which label set is in play and what the output format looks like. More examples concentrate the posterior; contradictory examples spread it.
 
 **The circuit view.** Mechanistic work (Olsson et al., 2022) identified "induction heads", attention heads that find an earlier occurrence of the current token and copy what followed it. This gives the model a concrete way to continue a pattern of the form `A B ... A -> B`, which is what a few-shot prompt is. The evidence is correlational for large models, but it grounds the intuition that pattern-completion is a native capability, not a trick.
 
@@ -92,7 +92,7 @@ Notice also that the second example ended in `positive`. If both examples end in
 
 <details><summary>Answer</summary>
 
-The conditioning prefix: the token sequence (including role markers from the chat template) over which the model computes `P(next token | prefix)`. Changing the prefix changes the distribution over continuations. There is no separate "instruction channel" inside the model.
+The conditioning prefix: the token sequence (including role markers from the chat template) over which the model computes $P(\text{next token} \mid \text{prefix})$. Changing the prefix changes the distribution over continuations. There is no separate "instruction channel" inside the model.
 
 </details>
 
@@ -233,30 +233,34 @@ Nearest-neighbour selection has a failure mode. If your pool has seven near-iden
 
 **Maximal Marginal Relevance (MMR)** (Carbonell and Goldstein, 1998) fixes this by greedily choosing items that are relevant to the query and different from what is already chosen:
 
-```text
-score(d) = lambda * sim(query, d) - (1 - lambda) * max over s in selected of sim(d, s)
+```math
+\operatorname{score}(d) = \lambda \, \operatorname{sim}(\text{query}, d) - (1 - \lambda) \max_{s \in \text{selected}} \operatorname{sim}(d, s)
 ```
 
-`lambda = 1` is plain top-k. `lambda = 0` ignores relevance and maximises spread. Typical values are 0.5 to 0.8.
+$\lambda = 1$ is plain top-k. $\lambda = 0$ ignores relevance and maximises spread. Typical values are 0.5 to 0.8.
 
 ### Worked example
 
-Unit vectors in 2D (cosine is the dot product). Query `q = (1, 0)`. Three candidates:
+Unit vectors in 2D (cosine is the dot product). Query $q = (1, 0)$. Three candidates:
 
-```text
-a = (0.90,  0.436)    sim(q, a) = 0.90
-b = (0.89,  0.456)    sim(q, b) = 0.89     a . b = 0.9998  (near-duplicate of a)
-c = (0.80, -0.60)     sim(q, c) = 0.80     a . c = 0.458
+```math
+\begin{aligned}
+a &= (0.90,\ 0.436) && \operatorname{sim}(q, a) = 0.90 \\
+b &= (0.89,\ 0.456) && \operatorname{sim}(q, b) = 0.89 && a \cdot b = 0.9998 \quad \text{(near-duplicate of } a\text{)} \\
+c &= (0.80,\ -0.60) && \operatorname{sim}(q, c) = 0.80 && a \cdot c = 0.458
+\end{aligned}
 ```
 
-With `lambda = 0.5`, round 1 picks `a` (highest relevance, no redundancy yet). Round 2:
+With $\lambda = 0.5$, round 1 picks $a$ (highest relevance, no redundancy yet). Round 2:
 
-```text
-score(b) = 0.5 * 0.89 - 0.5 * 0.9998 = 0.445  - 0.4999 = -0.055
-score(c) = 0.5 * 0.80 - 0.5 * 0.458  = 0.400  - 0.229  =  0.171
+```math
+\begin{aligned}
+\operatorname{score}(b) &= 0.5 \cdot 0.89 - 0.5 \cdot 0.9998 = 0.445 - 0.4999 = -0.055 \\
+\operatorname{score}(c) &= 0.5 \cdot 0.80 - 0.5 \cdot 0.458 = 0.400 - 0.229 = 0.171
+\end{aligned}
 ```
 
-MMR picks `c`. Plain top-2 would have picked `a` and `b`. You gave up 0.09 of query similarity (0.89 to 0.80) to avoid a duplicate. Exercise 03 implements this with bag-of-words vectors; swap in embeddings for production.
+MMR picks $c$. Plain top-2 would have picked $a$ and $b$. You gave up 0.09 of query similarity (0.89 to 0.80) to avoid a duplicate. Exercise 03 implements this with bag-of-words vectors; swap in embeddings for production.
 
 ```python
 import numpy as np
@@ -282,7 +286,7 @@ def mmr(query, cands, k, lam):
 
 Models tend to over-predict labels that are frequent in the demonstrations and labels that appear near the end. Zhao et al. proposed **contextual calibration**: measure the model's bias with a content-free input (for example `N/A`), then divide it out.
 
-Worked example with two labels. On the content-free input the model gives `p_cf = (0.70, 0.30)`, so it leans to label A before reading any content. On a real input it outputs `p = (0.60, 0.40)`. Calibrate by dividing each probability by `p_cf` and renormalising:
+Worked example with two labels. On the content-free input the model gives $p_{\text{cf}} = (0.70, 0.30)$, so it leans to label A before reading any content. On a real input it outputs $p = (0.60, 0.40)$. Calibrate by dividing each probability by $p_{\text{cf}}$ and renormalising:
 
 ```python
 import numpy as np
@@ -297,7 +301,7 @@ The calibrated prediction flips to B because 0.60 for A was mostly the model's b
 
 ### Ordering effects
 
-With `k` examples there are `k!` orderings (24 for four examples, 120 for five). Lu et al. (2021) showed that on some models and tasks, permutation alone moved accuracy from near the best to near chance. Mechanisms that are widely cited:
+With $k$ examples there are $k!$ orderings (24 for four examples, 120 for five). Lu et al. (2021) showed that on some models and tasks, permutation alone moved accuracy from near the best to near chance. Mechanisms that are widely cited:
 
 - **Recency bias**: the last demonstration has an outsized pull on the next token, so a label seen last is favoured.
 - **Majority label bias**: frequent labels are favoured.
@@ -319,15 +323,15 @@ Defaults that hold up in practice:
 
 ### Check yourself
 
-1. At `lambda = 1` what does MMR reduce to? At `lambda = 0`?
+1. At $\lambda = 1$ what does MMR reduce to? At $\lambda = 0$?
 
 <details><summary>Answer</summary>
 
-`lambda = 1` is plain top-k by similarity to the query. `lambda = 0` ignores the query and picks the item least similar to those already chosen, which gives diversity with no relevance.
+$\lambda = 1$ is plain top-k by similarity to the query. $\lambda = 0$ ignores the query and picks the item least similar to those already chosen, which gives diversity with no relevance.
 
 </details>
 
-2. With `p_cf = (0.5, 0.5)`, does contextual calibration change a prediction? Why?
+2. With $p_{\text{cf}} = (0.5, 0.5)$, does contextual calibration change a prediction? Why?
 
 <details><summary>Answer</summary>
 
@@ -350,7 +354,7 @@ Recency bias means the final demonstration has the strongest pull on the output.
 
 ### Why generating reasoning tokens helps
 
-A transformer with `L` layers performs a bounded amount of serial computation per generated token. A hard multi-step problem (a long multiplication, a chained logical deduction) can need more serial steps than one forward pass offers. Each generated token feeds back as input, so a chain of `T` intermediate tokens buys on the order of `T` additional passes of computation. Chain-of-thought (Wei et al., 2022) works because the reasoning text is the working memory and extra compute. This explains the empirical pattern: large gains on multi-step arithmetic, symbolic and commonsense chains, no gain on tasks answered by a single lookup, and weak gains on small models whose intermediate steps are unreliable.
+A transformer with $L$ layers performs a bounded amount of serial computation per generated token. A hard multi-step problem (a long multiplication, a chained logical deduction) can need more serial steps than one forward pass offers. Each generated token feeds back as input, so a chain of $T$ intermediate tokens buys on the order of $T$ additional passes of computation. Chain-of-thought (Wei et al., 2022) works because the reasoning text is the working memory and extra compute. This explains the empirical pattern: large gains on multi-step arithmetic, symbolic and commonsense chains, no gain on tasks answered by a single lookup, and weak gains on small models whose intermediate steps are unreliable.
 
 Zero-shot CoT (Kojima et al., 2022) showed that a phrase such as "Let's think step by step" elicits the behaviour without exemplars. Instruction-tuned models now do it unprompted when the task seems to need it.
 
@@ -376,24 +380,24 @@ The visible chain is not guaranteed to be the real cause of the answer. Turpin e
 
 ### Self-consistency
 
-Instead of one greedy chain, sample `k` chains at temperature above zero, extract each final answer, and take the majority (Wang et al., 2022). Different chains reach the same right answer by different routes more often than they reach the same wrong answer.
+Instead of one greedy chain, sample $k$ chains at temperature above zero, extract each final answer, and take the majority (Wang et al., 2022). Different chains reach the same right answer by different routes more often than they reach the same wrong answer.
 
-Idealised math. If each sample is independently correct with probability `p` and wrong answers never coincide with one another, a majority of `k` (odd) is correct with probability:
+Idealised math. If each sample is independently correct with probability $p$ and wrong answers never coincide with one another, a majority of $k$ (odd) is correct with probability:
 
-```text
-P_correct(k, p) = sum over i from (k+1)/2 to k of C(k, i) * p^i * (1 - p)^(k - i)
+```math
+P_{\text{correct}}(k, p) = \sum_{i=(k+1)/2}^{k} \binom{k}{i} p^i (1 - p)^{k - i}
 ```
 
-Worked numbers for `p = 0.7`:
+Worked numbers for $p = 0.7$:
 
-| k | P(majority correct) | Gain over k = 1 |
+| $k$ | $P(\text{majority correct})$ | Gain over $k = 1$ |
 |---|---|---|
 | 1 | 0.700 | 0 |
 | 3 | 0.784 | +8.4 points |
 | 5 | 0.837 | +13.7 points |
 | 7 | 0.874 | +17.4 points |
 
-Check `k = 3` by hand: exactly 2 correct is `3 * 0.49 * 0.3 = 0.441`, all 3 correct is `0.343`, total `0.784`. Observe three things. Gains diminish (the first extra pair of samples adds 8.4 points, the next pair only 5.3, the next 3.7). If `p < 0.5` the vote makes things worse. And cost scales linearly in `k`. Real gains are smaller than the table because samples from one model are correlated and wrong answers cluster. Exercise 04 implements the vote and this formula.
+Check $k = 3$ by hand: exactly 2 correct is $3 \times 0.49 \times 0.3 = 0.441$, all 3 correct is $0.343$, total $0.784$. Observe three things. Gains diminish (the first extra pair of samples adds 8.4 points, the next pair only 5.3, the next 3.7). If $p \lt 0.5$ the vote makes things worse. And cost scales linearly in $k$. Real gains are smaller than the table because samples from one model are correlated and wrong answers cluster. Exercise 04 implements the vote and this formula.
 
 ```python
 from collections import Counter
@@ -436,11 +440,11 @@ A useful routing rule: classification, extraction and rewriting go to a fast non
 
 ### Check yourself
 
-1. Compute the probability that a majority of 3 samples is correct for `p = 0.6`.
+1. Compute the probability that a majority of 3 samples is correct for $p = 0.6$.
 
 <details><summary>Answer</summary>
 
-Exactly 2 correct: `3 * 0.36 * 0.4 = 0.432`. All 3: `0.216`. Total `0.648`, a gain of 4.8 points over one sample. It is smaller than for `p = 0.7` because the vote has less signal to amplify.
+Exactly 2 correct: $3 \times 0.36 \times 0.4 = 0.432$. All 3: $0.216$. Total $0.648$, a gain of 4.8 points over one sample. It is smaller than for $p = 0.7$ because the vote has less signal to amplify.
 
 </details>
 
@@ -448,7 +452,7 @@ Exactly 2 correct: `3 * 0.36 * 0.4 = 0.432`. All 3: `0.216`. Total `0.648`, a ga
 
 <details><summary>Answer</summary>
 
-If `p < 0.5` for the right answer, majority voting amplifies the wrong answers. It also fails when errors are correlated, because the same misconception shows up in most samples and wins the vote.
+If $p \lt 0.5$ for the right answer, majority voting amplifies the wrong answers. It also fails when errors are correlated, because the same misconception shows up in most samples and wins the vote.
 
 </details>
 
@@ -483,7 +487,7 @@ The compiler converts a JSON Schema into a finite-state machine or context-free 
 1. The model produces logits over the vocabulary.
 2. The grammar state determines the set of allowed tokens.
 3. Logits of disallowed tokens are set to negative infinity.
-4. Softmax renormalises over the allowed tokens and one is sampled (or the argmax is taken).
+4. Softmax renormalises over the allowed tokens and one is sampled (or the $\arg\max$ is taken).
 
 Worked example with a five-token vocabulary where only tokens 1 and 3 are allowed by the grammar at this step:
 
@@ -504,7 +508,7 @@ print(free.round(4))         # [0.6364 0.2341 0.0861 0.0317 0.0117]
 print(constrained.round(4))  # [0.     0.8808 0.     0.1192 0.    ]
 ```
 
-Token 0 was the model's favourite (63.6%) but is illegal here. The allowed tokens (1 and 3) held 26.6% of the mass together, and after masking they split it as 88.1% and 11.9%, the ratio exp(2) : exp(0) of their original logits. Masking preserves the model's relative preferences among legal tokens. It also shows the cost: when the model's favourite is illegal, the legal choice may be one it considered unlikely, and forced choices can push content quality down. When the model is confident in the wrong thing, the output is valid and wrong.
+Token 0 was the model's favourite (63.6%) but is illegal here. The allowed tokens (1 and 3) held 26.6% of the mass together, and after masking they split it as 88.1% and 11.9%, the ratio $\exp(2) : \exp(0)$ of their original logits. Masking preserves the model's relative preferences among legal tokens. It also shows the cost: when the model's favourite is illegal, the legal choice may be one it considered unlikely, and forced choices can push content quality down. When the model is confident in the wrong thing, the output is valid and wrong.
 
 Implementation matters for latency: the allowed set depends on the grammar state, so engines precompute masks per state (Outlines, XGrammar and llama.cpp grammars take different approaches) and cache them. Schemas with deep nesting, large unions or complex regex patterns raise compile time and mask-computation cost, and hosted strict modes accept only a subset of JSON Schema.
 
@@ -544,7 +548,7 @@ Design decisions:
 - **Distinguish retryable from non-retryable failures.** A schema violation is retryable. A refusal or a content-policy stop is not.
 - **Log every failure.** The distribution of validation errors is a free eval of your prompt. If 80% of failures are one enum value, fix the prompt.
 
-Expected cost of a repair loop. If a single attempt succeeds with probability `s = 0.95` and each retry is independent with the same probability, the expected number of calls is `1 / s = 1.053` (geometric distribution, uncapped), so about 5% overhead. With cap 3, the failure rate is `(1 - s)^3 = 0.000125`, which is 1 in 8,000. Retries are far cheaper than failures, but if `s` is 0.6 the expected calls are 1.67 and the repair rate itself signals a prompt problem.
+Expected cost of a repair loop. If a single attempt succeeds with probability $s = 0.95$ and each retry is independent with the same probability, the expected number of calls is $1 / s = 1.053$ (geometric distribution, uncapped), so about 5% overhead. With cap 3, the failure rate is $(1 - s)^3 = 0.000125$, which is 1 in 8,000. Retries are far cheaper than failures, but if $s$ is 0.6 the expected calls are 1.67 and the repair rate itself signals a prompt problem.
 
 ### Where people go wrong
 
@@ -560,7 +564,7 @@ Expected cost of a repair loop. If a single attempt succeeds with probability `s
 
 <details><summary>Answer</summary>
 
-Softmax over only the allowed logits: `exp(2) / (exp(2) + exp(0)) = 7.389 / 8.389 = 0.881`, and `1 / 8.389 = 0.119`. Masked tokens contribute zero to the denominator, so legal tokens keep their relative odds.
+Softmax over only the allowed logits: $\exp(2) / (\exp(2) + \exp(0)) = 7.389 / 8.389 = 0.881$, and $1 / 8.389 = 0.119$. Masked tokens contribute zero to the denominator, so legal tokens keep their relative odds.
 
 </details>
 
@@ -629,11 +633,11 @@ Even within the limit, behaviour degrades as irrelevant or stale content accumul
 
 **Rolling summary algorithm.** Exercise 07 implements it:
 
-1. If tokens(summary) + tokens(messages) is within budget, do nothing.
+1. If $\text{tokens}(\text{summary}) + \text{tokens}(\text{messages})$ is within budget, do nothing.
 2. Otherwise reserve `summary_cap` tokens for the summary and pop the oldest messages until the rest fit, always keeping the last `keep_last` messages.
 3. New summary = summarise(old summary, popped messages), cut to `summary_cap`.
 
-Worked example. Budget 60 tokens, cap 20, eight 10-token messages (80 total). The message allowance is 60 - 20 = 40 tokens, so four messages are popped, leaving four (40 tokens). The summary of at most 20 tokens brings the total to at most 60. Because the previous summary is an input to the next one, information flows forward, but each pass can lose detail. After many rounds early facts survive only if the summariser keeps re-including them, which is why structured summaries with fixed sections (goal, decisions, state, open items) degrade more gracefully than free prose.
+Worked example. Budget 60 tokens, cap 20, eight 10-token messages (80 total). The message allowance is $60 - 20 = 40$ tokens, so four messages are popped, leaving four (40 tokens). The summary of at most 20 tokens brings the total to at most 60. Because the previous summary is an input to the next one, information flows forward, but each pass can lose detail. After many rounds early facts survive only if the summariser keeps re-including them, which is why structured summaries with fixed sections (goal, decisions, state, open items) degrade more gracefully than free prose.
 
 **Compact in batches.** Compacting after every turn keeps the context small but rewrites the prefix every time, so the prompt cache never hits (Part 7). Trigger at a threshold with headroom (for example at 75% of budget, compact down to 40%), so the stable prefix stays intact between compactions.
 
@@ -729,19 +733,19 @@ Use illustrative prices: input 3 USD per million tokens, output 15 USD per milli
 
 | Mode | Input cost | Output cost | Total |
 |---|---|---|---|
-| No caching | 10,500 x 3 / 1M = 0.0315 | 0.0045 | 0.0360 USD |
-| Cache write (miss) | (12,500 + 500) x 3 / 1M = 0.0390 | 0.0045 | 0.0435 USD |
-| Cache hit | (1,000 + 500) x 3 / 1M = 0.0045 | 0.0045 | 0.0090 USD |
+| No caching | $10{,}500 \times 3 / 10^6 = 0.0315$ | 0.0045 | 0.0360 USD |
+| Cache write (miss) | $(12{,}500 + 500) \times 3 / 10^6 = 0.0390$ | 0.0045 | 0.0435 USD |
+| Cache hit | $(1{,}000 + 500) \times 3 / 10^6 = 0.0045$ | 0.0045 | 0.0090 USD |
 
 A hit is 4x cheaper than no caching for this request. A write is 21% dearer than no caching. So caching is a bet that the prefix will be reused.
 
-**Break-even hit rate.** Let `w` be the write multiplier and `r` the read multiplier. Over many requests with hit rate `h`, the prefix costs `h * r + (1 - h) * w` times the base price. Caching wins when that is below 1:
+**Break-even hit rate.** Let $w$ be the write multiplier and $r$ the read multiplier. Over many requests with hit rate $h$, the prefix costs $h r + (1 - h) w$ times the base price. Caching wins when that is below 1:
 
-```text
-h * r + (1 - h) * w < 1   ->   h > (w - 1) / (w - r)
+```math
+h r + (1 - h) w < 1 \quad \Longrightarrow \quad h > \frac{w - 1}{w - r}
 ```
 
-With `w = 1.25` and `r = 0.1`: `h > 0.25 / 1.15 = 0.217`. If more than about 22% of requests reuse a live cache entry, caching saves money. With a longer TTL at `w = 2.0`: `h > 1 / 1.9 = 0.526`. The suffix and output costs are the same either way and cancel out of the comparison.
+With $w = 1.25$ and $r = 0.1$: $h \gt 0.25 / 1.15 = 0.217$. If more than about 22% of requests reuse a live cache entry, caching saves money. With a longer TTL at $w = 2.0$: $h \gt 1 / 1.9 = 0.526$. The suffix and output costs are the same either way and cancel out of the comparison.
 
 Expected cost per request of the example above as hit rate varies:
 
@@ -753,13 +757,28 @@ Expected cost per request of the example above as hit rate varies:
 | 90% | 0.0125 | -65% |
 | 100% | 0.0090 | -75% |
 
-**Traffic versus TTL.** A hit requires the entry to still be alive. If every hit refreshes the TTL and requests arrive as a Poisson process at `rate` per minute, the chance that the next request arrives within `ttl` minutes is `1 - exp(-rate * ttl)`. At one request per minute with a 5-minute TTL that is `1 - e^-5 = 99.3%`. At one request per 20 minutes it is `1 - e^-0.25 = 22%`, right at break-even for 1.25x writes. At one per 100 minutes it is `1 - e^-0.05 = 4.9%`, so you would pay the write premium nearly every time and lose money. Low-traffic prompts either should not be cached, or should use a longer TTL if the hit rate then clears its higher break-even. P2 in the exercise README works this through.
+**Traffic versus TTL.** A hit requires the entry to still be alive. If every hit refreshes the TTL and requests arrive as a Poisson process at $\text{rate}$ per minute, the chance that the next request arrives within $\text{TTL}$ minutes is $1 - \exp(-\text{rate} \cdot \text{TTL})$. At one request per minute with a 5-minute TTL that is $1 - e^{-5} = 0.993$, or 99.3%. At one request per 20 minutes it is $1 - e^{-0.25} = 0.22$, or 22%, right at break-even for 1.25x writes. At one per 100 minutes it is $1 - e^{-0.05} = 0.049$, or 4.9%, so you would pay the write premium nearly every time and lose money. Low-traffic prompts either should not be cached, or should use a longer TTL if the hit rate then clears its higher break-even. P2 in the exercise README works this through.
 
-**Agent loop.** This is where caching pays most. An agent starts with a 10,000-token prefix (system, tools, task) and each step adds 1,000 tokens (model output plus tool result). Step `i` sends `10,000 + 1,000 i` tokens.
+**Agent loop.** This is where caching pays most. An agent starts with a 10,000-token prefix (system, tools, task) and each step adds 1,000 tokens (model output plus tool result). Step $i$ sends $10{,}000 + 1{,}000 i$ tokens.
 
-Without caching, a 10-step loop sends `sum (10,000 + 1,000 i)` for `i = 1..10` = 100,000 + 55,000 = **155,000 input tokens**, 0.465 USD at 3 USD per million.
+Without caching, a 10-step loop sends **155,000 input tokens**, 0.465 USD at 3 USD per million:
 
-With caching, step 1 writes all 11,000 tokens (13,750 token-equivalents at 1.25x). Each later step reads the previous context at 0.1x and writes the 1,000 new tokens at 1.25x. Reads over steps 2-10 total `sum (10,000 + 1,000 (i - 1))` for `i = 2..10` = 135,000 tokens, or 13,500 equivalents. Writes are 9 x 1,000 x 1.25 = 11,250. Total 13,750 + 13,500 + 11,250 = **38,500 token-equivalents**, 0.1155 USD. That is 4.0x cheaper. At 20 steps the uncached total is 410,000 tokens and the cached total 75,500 equivalents, 5.4x cheaper, and the ratio grows with loop length because the re-sent prefix dominates. This is the arithmetic behind "caching is a 5-10x lever for agents". Exercise 06 implements it, so you can vary the numbers.
+```math
+\sum_{i=1}^{10} \big(10{,}000 + 1{,}000\,i\big) = 100{,}000 + 55{,}000 = 155{,}000 \ \text{tokens}
+```
+
+With caching, step 1 writes all 11,000 tokens (13,750 token-equivalents at 1.25x). Each later step reads the previous context at 0.1x and writes the 1,000 new tokens at 1.25x:
+
+```math
+\begin{aligned}
+\text{step 1 write} &= 11{,}000 \times 1.25 = 13{,}750 \\
+\text{reads, steps 2-10} &= 0.1 \times \sum_{i=2}^{10} \big(10{,}000 + 1{,}000\,(i - 1)\big) = 0.1 \times 135{,}000 = 13{,}500 \\
+\text{writes, steps 2-10} &= 9 \times 1{,}000 \times 1.25 = 11{,}250 \\
+\text{total} &= 13{,}750 + 13{,}500 + 11{,}250 = 38{,}500 \ \text{token-equivalents}
+\end{aligned}
+```
+
+Total **38,500 token-equivalents**, 0.1155 USD. That is 4.0x cheaper. At 20 steps the uncached total is 410,000 tokens and the cached total 75,500 equivalents, 5.4x cheaper, and the ratio grows with loop length because the re-sent prefix dominates. This is the arithmetic behind "caching is a 5-10x lever for agents". Exercise 06 implements it, so you can vary the numbers.
 
 ### What breaks the cache (a checklist)
 
@@ -791,7 +810,7 @@ Monitor it. Providers report cached and uncached input tokens per request. Log t
 
 <details><summary>Answer</summary>
 
-`0.25 / (1.25 - 0.1) = 21.7%`. With 0.05x reads: `0.25 / 1.20 = 20.8%`. The break-even moves little because it is dominated by the write premium, while the read discount drives the savings once you are above it.
+$0.25 / (1.25 - 0.1) = 0.217$, or 21.7%. With 0.05x reads: $0.25 / 1.20 = 0.208$, or 20.8%. The break-even moves little because it is dominated by the write premium, while the read discount drives the savings once you are above it.
 
 </details>
 
@@ -799,7 +818,17 @@ Monitor it. Providers report cached and uncached input tokens per request. Log t
 
 <details><summary>Answer</summary>
 
-Uncached: `sum (4,000 + 500 i)` for `i = 1..5` = 20,000 + 7,500 = 27,500 tokens = 0.0825 USD. Cached: step 1 writes 4,500 x 1.25 = 5,625. Reads for steps 2-5: `4,500 + 5,000 + 5,500 + 6,000` = 21,000 x 0.1 = 2,100. Writes: 4 x 500 x 1.25 = 2,500. Total 10,225 equivalents = 0.0307 USD, a ratio of about 2.7x.
+$$\text{uncached} = \sum_{i=1}^{5} \big(4{,}000 + 500 i\big) = 20{,}000 + 7{,}500 = 27{,}500 \text{ tokens} = 0.0825 \text{ USD}$$
+
+$$\text{cached, step 1 write} = 4{,}500 \times 1.25 = 5{,}625$$
+
+$$\text{reads, steps 2-5} = (4{,}500 + 5{,}000 + 5{,}500 + 6{,}000) \times 0.1 = 21{,}000 \times 0.1 = 2{,}100$$
+
+$$\text{writes, steps 2-5} = 4 \times 500 \times 1.25 = 2{,}500$$
+
+$$\text{cached total} = 5{,}625 + 2{,}100 + 2{,}500 = 10{,}225 \text{ equivalents} = 0.0307 \text{ USD}$$
+
+The ratio is about 2.7x.
 
 </details>
 
@@ -891,16 +920,18 @@ A prompt change that reads better can score worse. Without measurement, prompt w
 
 ### How big a difference can you see?
 
-Accuracy measured on `n` cases has a standard error of `sqrt(p (1 - p) / n)`. At `p = 0.8` and `n = 100` that is `sqrt(0.16 / 100) = 0.04`, so the 95% interval is about +/- 7.8 points. Two prompts that differ by 5 points on 100 cases are statistically indistinguishable in an unpaired comparison. To detect 80% versus 85% with unpaired samples at 5% significance and 80% power you need roughly:
+Accuracy measured on $n$ cases has a standard error of $\sqrt{p (1 - p) / n}$. At $p = 0.8$ and $n = 100$ that is $\sqrt{0.16 / 100} = 0.04$, so the 95% interval is about $\pm 7.8$ points. Two prompts that differ by 5 points on 100 cases are statistically indistinguishable in an unpaired comparison. To detect 80% versus 85% with unpaired samples at 5% significance and 80% power you need roughly (with $\bar p = 0.825$ the mean accuracy of the two arms and $d = 0.05$ the difference):
 
-```text
-n per arm ~ 2 * (1.96 + 0.84)^2 * pbar * (1 - pbar) / d^2
-          = 15.68 * 0.825 * 0.175 / 0.05^2 ~ 906
+```math
+\begin{aligned}
+n_{\text{per arm}} &\approx \frac{2\,(1.96 + 0.84)^2\,\bar p\,(1 - \bar p)}{d^2} \\
+&= \frac{15.68 \times 0.825 \times 0.175}{0.05^2} \approx 906
+\end{aligned}
 ```
 
-About 900 cases per arm. Paired comparisons on the same cases are far more sensitive because they ignore cases both prompts get right (or wrong). Use McNemar's idea: only the **discordant** cases matter. If B is right and A wrong on `b` cases, and the reverse on `c` cases, the test statistic is `z = (b - c) / sqrt(b + c)`.
+About 900 cases per arm. Paired comparisons on the same cases are far more sensitive because they ignore cases both prompts get right (or wrong). Use McNemar's idea: only the **discordant** cases matter. If B is right and A wrong on $b$ cases, and the reverse on $c$ cases, the test statistic is $z = (b - c) / \sqrt{b + c}$.
 
-Worked example: `b = 12`, `c = 5`, 83 cases agree. `z = 7 / sqrt(17) = 7 / 4.12 = 1.70`, a two-sided p-value of about 0.09. B is ahead by 7 cases but you cannot yet rule out chance. Look at the 17 discordant cases and grow the set. Run this in code:
+Worked example: $b = 12$, $c = 5$, 83 cases agree. $z = 7 / \sqrt{17} = 7 / 4.12 = 1.70$, a two-sided p-value of about 0.09. B is ahead by 7 cases but you cannot yet rule out chance. Look at the 17 discordant cases and grow the set. Run this in code:
 
 ```python
 import math
@@ -958,11 +989,11 @@ Cases both prompts solve or both fail carry no information about which is better
 
 </details>
 
-2. Compute `z` for `b = 20`, `c = 8`. Is the result significant at 5%?
+2. Compute $z$ for $b = 20$, $c = 8$. Is the result significant at 5%?
 
 <details><summary>Answer</summary>
 
-`z = 12 / sqrt(28) = 12 / 5.29 = 2.27`, a two-sided p-value of about 0.023. Yes, significant at 5%, provided the cases are independent and representative.
+$z = 12 / \sqrt{28} = 12 / 5.29 = 2.27$, a two-sided p-value of about 0.023. Yes, significant at 5%, provided the cases are independent and representative.
 
 </details>
 
