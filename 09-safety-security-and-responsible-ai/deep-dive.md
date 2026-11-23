@@ -667,9 +667,9 @@ Pretraining produces a model that can continue any text, including harmful text.
 1. Collect comparisons: for a prompt, humans (or a model, in RLAIF) pick the better of two responses.
 2. Train a reward model $r(x, y)$ on those pairs with the Bradley-Terry model:
 
-   $$P(y_w \text{ preferred over } y_l) = \operatorname{sigmoid}\big(r(y_w) - r(y_l)\big)$$
+   $$P(y_w \text{ preferred over } y_l) = \mathrm{sigmoid}\big(r(y_w) - r(y_l)\big)$$
 
-   If $r(y_w) = 2.0$ and $r(y_l) = 0.5$, the probability is $\operatorname{sigmoid}(1.5) = 0.818$, and the training loss for this pair is $-\ln(0.818) = 0.201$. If the reward model had scored them equal, the probability would be 0.5 and the loss $\ln 2 = 0.693$.
+   If $r(y_w) = 2.0$ and $r(y_l) = 0.5$, the probability is $\mathrm{sigmoid}(1.5) = 0.818$, and the training loss for this pair is $-\ln(0.818) = 0.201$. If the reward model had scored them equal, the probability would be 0.5 and the loss $\ln 2 = 0.693$.
 3. Optimise the policy to maximise reward with a penalty for drifting from the reference model:
 
    $$\max_{\pi} \thickspace \mathbb{E}\big[r(x, y)\big] - \beta \cdot \mathrm{KL}\big(\pi \thinspace\Vert\thinspace \pi_{\text{ref}}\big)$$
@@ -705,7 +705,7 @@ Phrases to avoid in design reviews: "alignment via system prompt" and "the model
 
 <details><summary>Answer</summary>
 
-The model is indifferent: $P = \operatorname{sigmoid}(0) = 0.5$, and the cross-entropy loss is $\ln 2 = 0.693$. Training increases the margin on the preferred response until the probability approaches the labelled preference.
+The model is indifferent: $P = \mathrm{sigmoid}(0) = 0.5$, and the cross-entropy loss is $\ln 2 = 0.693$. Training increases the margin on the preferred response until the probability approaches the labelled preference.
 
 </details>
 

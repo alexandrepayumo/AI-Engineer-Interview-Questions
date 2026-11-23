@@ -163,7 +163,7 @@ With $\sigma$ fixed, the second term is a constant and the first is proportional
 
 ### Cross-entropy is categorical MLE
 
-For a binary label $y \in \lbrace 0, 1 \rbrace$ with predicted probability $p = \operatorname{sigmoid}(z)$:
+For a binary label $y \in \lbrace 0, 1 \rbrace$ with predicted probability $p = \mathrm{sigmoid}(z)$:
 
 ```math
 \log p(y \mid x) = y \log p + (1 - y) \log(1 - p)
@@ -224,22 +224,22 @@ For distributions $P$ (the truth) and $Q$ (the model):
 \begin{aligned}
 H(P) &= -\sum P \log P && \text{entropy} \\
 H(P, Q) &= -\sum P \log Q && \text{cross-entropy} \\
-\operatorname{KL}(P \,\Vert\, Q) &= \sum P \log \frac{P}{Q} = H(P, Q) - H(P)
+\mathrm{KL}(P \,\Vert\, Q) &= \sum P \log \frac{P}{Q} = H(P, Q) - H(P)
 \end{aligned}
 ```
 
-Since $H(P)$ does not depend on the model, minimising cross-entropy is minimising $\operatorname{KL}(P \Vert Q)$. Numbers: $P = [0.5, 0.5]$, $Q = [0.9, 0.1]$:
+Since $H(P)$ does not depend on the model, minimising cross-entropy is minimising $\mathrm{KL}(P \Vert Q)$. Numbers: $P = [0.5, 0.5]$, $Q = [0.9, 0.1]$:
 
 ```math
 \begin{aligned}
 H(P) &= 0.693 \text{ nats} \\
 H(P, Q) &= 1.204 \text{ nats} \\
-\operatorname{KL}(P \,\Vert\, Q) &= 0.511 \text{ nats} && (1.204 - 0.693) \\
-\operatorname{KL}(Q \,\Vert\, P) &= 0.368 \text{ nats} && \text{(not equal: KL is asymmetric)}
+\mathrm{KL}(P \,\Vert\, Q) &= 0.511 \text{ nats} && (1.204 - 0.693) \\
+\mathrm{KL}(Q \,\Vert\, P) &= 0.368 \text{ nats} && \text{(not equal: KL is asymmetric)}
 \end{aligned}
 ```
 
-KL is zero only when $P = Q$ and is never negative. Direction matters. Training with $\operatorname{KL}(P \Vert Q)$ where $P$ is data ("forward KL") punishes $Q$ for putting low mass where $P$ has mass, so it covers all modes, even at the price of spreading mass between them. $\operatorname{KL}(Q \Vert P)$ ("reverse KL") punishes $Q$ for mass where $P$ has none, so it tends to lock onto a single mode. This distinction shows up in RLHF (a KL penalty to the reference policy), in distillation, and in variational methods.
+KL is zero only when $P = Q$ and is never negative. Direction matters. Training with $\mathrm{KL}(P \Vert Q)$ where $P$ is data ("forward KL") punishes $Q$ for putting low mass where $P$ has mass, so it covers all modes, even at the price of spreading mass between them. $\mathrm{KL}(Q \Vert P)$ ("reverse KL") punishes $Q$ for mass where $P$ has none, so it tends to lock onto a single mode. This distinction shows up in RLHF (a KL penalty to the reference policy), in distillation, and in variational methods.
 
 ### Check yourself
 
@@ -311,7 +311,7 @@ Forward pass, caching each value:
 a &= 0.5 \times 1.0 + 0 = 0.5 \\
 h &= \tanh(0.5) = 0.46212 \\
 z &= 2.0 \times 0.46212 - 0.5 = 0.42423 \\
-p &= \operatorname{sigmoid}(0.42423) = 0.60450 \\
+p &= \mathrm{sigmoid}(0.42423) = 0.60450 \\
 L &= -\log(0.60450) = 0.50336
 \end{aligned}
 ```
@@ -352,7 +352,7 @@ dX &= dY \, W^\top && (B, d_{\text{in}})
 \end{aligned}
 ```
 
-Shapes tell you the answer: $dW$ must be the shape of $W$, and the only way to combine $X^\top$ of shape $(d_{\text{in}}, B)$ with $dY$ of shape $(B, d_{\text{out}})$ is as written. Elementwise activations multiply $dY$ by the local derivative: tanh by $(1 - h^2)$, ReLU by $\mathbb{1}[x \gt 0]$, GELU by its own derivative. Softmax with cross-entropy and mean over $B$ gives $(\operatorname{softmax} - \text{onehot}) / B$ at the logits, with the $1/B$ being the one people forget.
+Shapes tell you the answer: $dW$ must be the shape of $W$, and the only way to combine $X^\top$ of shape $(d_{\text{in}}, B)$ with $dY$ of shape $(B, d_{\text{out}})$ is as written. Elementwise activations multiply $dY$ by the local derivative: tanh by $(1 - h^2)$, ReLU by $\mathbb{1}[x \gt 0]$, GELU by its own derivative. Softmax with cross-entropy and mean over $B$ gives $(\mathrm{softmax} - \text{onehot}) / B$ at the logits, with the $1/B$ being the one people forget.
 
 ### Cost: why training is about 3x the forward pass
 
@@ -390,7 +390,7 @@ Use float64, $\epsilon$ around $10^{-5}$, and expect a relative error of about $
 
 <details><summary>Answer</summary>
 
-For $L = -[y \log p + (1 - y) \log(1 - p)]$ with $p = \operatorname{sigmoid}(z)$, $\partial L / \partial p = -y/p + (1 - y)/(1 - p)$ and $\partial p / \partial z = p (1 - p)$. Multiplying gives $p - y$. With $y = 0$, $\partial L / \partial z = p = 0.6045$, positive, so gradient descent would push $z$ down, which is right because the model is predicting a positive for a negative example.
+For $L = -[y \log p + (1 - y) \log(1 - p)]$ with $p = \mathrm{sigmoid}(z)$, $\partial L / \partial p = -y/p + (1 - y)/(1 - p)$ and $\partial p / \partial z = p (1 - p)$. Multiplying gives $p - y$. With $y = 0$, $\partial L / \partial z = p = 0.6045$, positive, so gradient descent would push $z$ down, which is right because the model is predicting a positive for a negative example.
 
 </details>
 
@@ -480,7 +480,7 @@ If $g$ has constant expectation, $\mathbb{E}[m_t] = (1 - \beta_1^t) \mathbb{E}[g
 \hat m_t = \frac{m_t}{1 - \beta_1^t}, \qquad \hat v_t = \frac{v_t}{1 - \beta_2^t}
 ```
 
-Without it the second moment at step 1 is only $v_1 = 0.001 g^2$ (for $\beta_2 = 0.999$), so $\sqrt{v_1} \approx 0.032 \lvert g \rvert$, while the first moment is $m_1 = 0.1 g$. The first step would be $0.1 / 0.032 \approx 3.2$ times $\eta \operatorname{sign}(g)$, and the second-moment estimate would stay too small for hundreds of steps, inflating every early update.
+Without it the second moment at step 1 is only $v_1 = 0.001 g^2$ (for $\beta_2 = 0.999$), so $\sqrt{v_1} \approx 0.032 \lvert g \rvert$, while the first moment is $m_1 = 0.1 g$. The first step would be $0.1 / 0.032 \approx 3.2$ times $\eta \mathrm{sign}(g)$, and the second-moment estimate would stay too small for hundreds of steps, inflating every early update.
 
 **Worked example.** Gradient sequence $g = 1, 1, -1$, $\eta = 0.1$, starting at $w = 1$ (the exercise 4 tests check the first two steps):
 
@@ -503,7 +503,7 @@ The sign flip in the gradient drags the momentum from 1 toward 0 and shrinks the
 
 Properties worth knowing:
 
-- **First step** is about $\eta \operatorname{sign}(g)$, since $\hat m / \sqrt{\hat v} = g / \lvert g \rvert$. This is why a poorly scaled Adam run can take a huge first step.
+- **First step** is about $\eta \mathrm{sign}(g)$, since $\hat m / \sqrt{\hat v} = g / \lvert g \rvert$. This is why a poorly scaled Adam run can take a huge first step.
 - **Scale invariance**: multiply the loss by 1000 and the update is unchanged (up to $\epsilon$). SGD has no such property.
 - $\beta_2$: 0.999 is the paper default. LLM recipes often use 0.95, because a shorter memory of squared gradients reacts faster after a loss spike and avoids stale, too-large $v$ estimates.
 
@@ -549,7 +549,7 @@ with progress running from 0 to 1 after warmup. Numbers for peak $3 \times 10^{-
 
 <details><summary>Answer</summary>
 
-At $t = 1$ the moments start at zero, so after bias correction $\hat m = g$ and $\hat v = g^2$. The update is $\eta g / (\lvert g \rvert + \epsilon) \approx \eta \operatorname{sign}(g)$. The step depends on the sign of the gradient, not its size, which is the scale invariance of Adam. (Exercise 4 checks that $g = 0.5$ and $g = 500$ produce the same first step.)
+At $t = 1$ the moments start at zero, so after bias correction $\hat m = g$ and $\hat v = g^2$. The update is $\eta g / (\lvert g \rvert + \epsilon) \approx \eta \mathrm{sign}(g)$. The step depends on the sign of the gradient, not its size, which is the scale invariance of Adam. (Exercise 4 checks that $g = 0.5$ and $g = 500$ produce the same first step.)
 
 </details>
 
@@ -582,19 +582,19 @@ A deep network multiplies the signal by a weight matrix at every layer. A per-la
 Consider one linear unit $y = \sum_{i=1}^{n} w_i x_i$ with independent zero-mean weights and inputs. Then:
 
 ```math
-\operatorname{Var}(y) = n \cdot \operatorname{Var}(w) \cdot \mathbb{E}[x^2]
+\mathrm{Var}(y) = n \cdot \mathrm{Var}(w) \cdot \mathbb{E}[x^2]
 ```
 
-To keep $\operatorname{Var}(y)$ equal to $\mathbb{E}[x^2]$ you need $\operatorname{Var}(w) = 1/n$. That is the **forward** condition with $n = n_{\text{in}}$ (the fan-in). By the same argument on the backward pass the condition is $\operatorname{Var}(w) = 1/n_{\text{out}}$ (the fan-out). **Xavier/Glorot** initialisation compromises: $\operatorname{Var}(w) = 2 / (n_{\text{in}} + n_{\text{out}})$. It was derived for roughly linear or tanh activations near zero.
+To keep $\mathrm{Var}(y)$ equal to $\mathbb{E}[x^2]$ you need $\mathrm{Var}(w) = 1/n$. That is the **forward** condition with $n = n_{\text{in}}$ (the fan-in). By the same argument on the backward pass the condition is $\mathrm{Var}(w) = 1/n_{\text{out}}$ (the fan-out). **Xavier/Glorot** initialisation compromises: $\mathrm{Var}(w) = 2 / (n_{\text{in}} + n_{\text{out}})$. It was derived for roughly linear or tanh activations near zero.
 
-ReLU sets negative pre-activations to zero, which halves the second moment $\mathbb{E}[x^2]$ of the next layer's input. To compensate, double the weight variance: **He initialisation**, $\operatorname{Var}(w) = 2 / n_{\text{in}}$.
+ReLU sets negative pre-activations to zero, which halves the second moment $\mathbb{E}[x^2]$ of the next layer's input. To compensate, double the weight variance: **He initialisation**, $\mathrm{Var}(w) = 2 / n_{\text{in}}$.
 
 Measured in exercise 7: 30 layers of width 256, standard-normal inputs, std of the post-ReLU activations after layers 1, 10, 19, 28:
 
 | Init | L1 | L10 | L19 | L28 |
 |---|---|---|---|---|
-| He, $\operatorname{Var}(w) = 2/n_{\text{in}}$ | 0.82 | 0.74 | 0.69 | 0.56 |
-| Xavier, $\operatorname{Var}(w) = 2/(n_{\text{in}} + n_{\text{out}}) = 1/256$ | 0.58 | 0.023 | 0.0009 | ~6e-5 |
+| He, $\mathrm{Var}(w) = 2/n_{\text{in}}$ | 0.82 | 0.74 | 0.69 | 0.56 |
+| Xavier, $\mathrm{Var}(w) = 2/(n_{\text{in}} + n_{\text{out}}) = 1/256$ | 0.58 | 0.023 | 0.0009 | ~6e-5 |
 | $\mathcal{N}(0, 0.01^2)$ | 0.093 | 2.5e-10 | 7e-19 | 2e-27 |
 | $\mathcal{N}(0, 0.2^2)$ | 1.9 | 2.6e3 | 3.8e6 | 4.8e9 |
 
@@ -608,7 +608,7 @@ Every normalisation layer computes $(x - \text{mean}) / \sqrt{\text{var} + \epsi
 
 - **BatchNorm**: statistics per feature, over the batch (and spatial positions in a convnet). Output for one example depends on the other examples in the batch.
 - **LayerNorm**: statistics per example, over the $D$ features. Independent of the batch.
-- **RMSNorm**: $\gamma \cdot x / \sqrt{\operatorname{mean}(x^2) + \epsilon}$. LayerNorm without mean subtraction (and usually without $\beta$). Cheaper, and works as well in practice for transformers.
+- **RMSNorm**: $\gamma \cdot x / \sqrt{\mathrm{mean}(x^2) + \epsilon}$. LayerNorm without mean subtraction (and usually without $\beta$). Cheaper, and works as well in practice for transformers.
 
 Numbers. LayerNorm of the row [1, 2, 3]: mean 2, variance $(1 + 0 + 1) / 3 = 0.667$, std 0.8165, output [-1.2247, 0, 1.2247]. RMSNorm of [3, 4]: mean square 12.5, rms 3.5355, output [0.8485, 1.1314], not mean-centred. BatchNorm of a single feature across a batch of four values [1, 2, 3, 6]: mean 3, variance $(4 + 1 + 0 + 9) / 4 = 3.5$, std 1.871, output [-1.069, -0.535, 0, 1.604].
 
@@ -622,7 +622,7 @@ BatchNorm's batch dependence has practical costs that all bite in sequence model
 
 LayerNorm computes statistics per token, so the same function applies in training, evaluation, batch size one, and generation. Exercise 7 checks both properties: a row normalises identically alone or in a batch under LayerNorm, but not under BatchNorm.
 
-**Pre-norm versus post-norm.** The original transformer normalises after the residual add (post-norm): $x \leftarrow \operatorname{LN}(x + f(x))$. Modern models normalise the sublayer input and add the raw output (pre-norm): $x \leftarrow x + f(\operatorname{LN}(x))$. In pre-norm the residual stream is an unnormalised highway, so gradients reach early layers through the identity path, which makes training stable without a delicate warmup. QK-norm (normalising queries and keys before the attention dot product) bounds attention logits and prevents a known late-training instability.
+**Pre-norm versus post-norm.** The original transformer normalises after the residual add (post-norm): $x \leftarrow \mathrm{LN}(x + f(x))$. Modern models normalise the sublayer input and add the raw output (pre-norm): $x \leftarrow x + f(\mathrm{LN}(x))$. In pre-norm the residual stream is an unnormalised highway, so gradients reach early layers through the identity path, which makes training stable without a delicate warmup. QK-norm (normalising queries and keys before the attention dot product) bounds attention logits and prevents a known late-training instability.
 
 ### Check yourself
 
@@ -630,7 +630,7 @@ LayerNorm computes statistics per token, so the same function applies in trainin
 
 <details><summary>Answer</summary>
 
-For $y = \sum_i w_i x_i$ with independent zero-mean $w$ and $x$, $\operatorname{Var}(y) = n_{\text{in}} \operatorname{Var}(w) \mathbb{E}[x^2]$. After ReLU the next layer's input has $\mathbb{E}[x^2] = \operatorname{Var}(y) / 2$, because half of a symmetric distribution is zeroed. To keep the second moment constant from layer to layer you need $n_{\text{in}} \operatorname{Var}(w) / 2 = 1$, which gives $\operatorname{Var}(w) = 2 / n_{\text{in}}$.
+For $y = \sum_i w_i x_i$ with independent zero-mean $w$ and $x$, $\mathrm{Var}(y) = n_{\text{in}} \mathrm{Var}(w) \mathbb{E}[x^2]$. After ReLU the next layer's input has $\mathbb{E}[x^2] = \mathrm{Var}(y) / 2$, because half of a symmetric distribution is zeroed. To keep the second moment constant from layer to layer you need $n_{\text{in}} \mathrm{Var}(w) / 2 = 1$, which gives $\mathrm{Var}(w) = 2 / n_{\text{in}}$.
 
 </details>
 
@@ -638,7 +638,7 @@ For $y = \sum_i w_i x_i$ with independent zero-mean $w$ and $x$, $\operatorname{
 
 <details><summary>Answer</summary>
 
-Each layer multiplies the activation scale by about $\sqrt{n_{\text{in}} / 2}$, since $\operatorname{Var}(w) = 1$ instead of $2 / n_{\text{in}}$. With $n_{\text{in}} = 512$ that is a factor of 16 per layer, so after 12 layers activations are about $16^{12} \approx 3 \times 10^{14}$ times larger than inputs. Logits then overflow the softmax or loss computation, or the gradients are so large that a single update sends parameters to infinity. The fix is a proper fan-in-scaled init.
+Each layer multiplies the activation scale by about $\sqrt{n_{\text{in}} / 2}$, since $\mathrm{Var}(w) = 1$ instead of $2 / n_{\text{in}}$. With $n_{\text{in}} = 512$ that is a factor of 16 per layer, so after 12 layers activations are about $16^{12} \approx 3 \times 10^{14}$ times larger than inputs. Logits then overflow the softmax or loss computation, or the gradients are so large that a single update sends parameters to infinity. The fix is a proper fan-in-scaled init.
 
 </details>
 
@@ -674,10 +674,10 @@ For SGD, the gradient step becomes $w \leftarrow (1 - \eta \lambda) w - \eta g$,
 
 ### L1: sparsity and a Laplace prior
 
-Add $\lambda \lVert w \rVert_1$. The gradient of $\lvert w \rvert$ is $\operatorname{sign}(w)$, a constant push towards zero whatever the size of $w$. The L2 push is proportional to $w$, so it fades as $w$ shrinks and never quite reaches zero. For orthonormal features, the L1 solution is soft-thresholding:
+Add $\lambda \lVert w \rVert_1$. The gradient of $\lvert w \rvert$ is $\mathrm{sign}(w)$, a constant push towards zero whatever the size of $w$. The L2 push is proportional to $w$, so it fades as $w$ shrinks and never quite reaches zero. For orthonormal features, the L1 solution is soft-thresholding:
 
 ```math
-w_{\text{lasso}} = \operatorname{sign}(w_{\text{ols}}) \cdot \max\big(\lvert w_{\text{ols}} \rvert - \lambda, \ 0\big)
+w_{\text{lasso}} = \mathrm{sign}(w_{\text{ols}}) \cdot \max\big(\lvert w_{\text{ols}} \rvert - \lambda, \ 0\big)
 ```
 
 Take $w_{\text{ols}} = 0.3$ and $\lambda = 0.5$: lasso gives exactly 0, while ridge ($\lambda = 0.5$ in the $1/(1 + \lambda)$ form) gives 0.2. This is why L1 performs feature selection. Geometrically, the L1 ball has corners on the axes, so the loss contours first touch it at a sparse point. L1 is rare in deep learning training, but it appears in sparse-feature learning and structured pruning.
@@ -792,7 +792,7 @@ A model is **calibrated** if, among all predictions of probability 0.8, about 80
 **Expected calibration error** (binary, equal-width bins):
 
 ```math
-\text{ECE} = \sum_{\text{bins } b} \frac{n_b}{n} \left\lvert \operatorname{mean}(y \in b) - \operatorname{mean}(p \in b) \right\rvert
+\text{ECE} = \sum_{\text{bins } b} \frac{n_b}{n} \left\lvert \mathrm{mean}(y \in b) - \mathrm{mean}(p \in b) \right\rvert
 ```
 
 Example: ten predictions all at 0.99, of which 7 are positive. One bin contains everything, observed 0.7 versus mean confidence 0.99, $\text{ECE} = 0.29$. If instead the ten predictions were at 0.8 and 8 are positive, $\text{ECE} = 0$.

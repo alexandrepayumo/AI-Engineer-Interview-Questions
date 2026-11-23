@@ -268,7 +268,7 @@ All of these map $N$ encoder tokens of width $d_v$ to $M$ LLM-space tokens of wi
 ```math
 \begin{aligned}
 &Q \in \mathbb{R}^{M \times d} \text{ (learned queries)}, \qquad K, V \in \mathbb{R}^{N \times d} \text{ (from patch embeddings)} \\
-&\text{output} = \operatorname{softmax}\!\left(\frac{Q K^\top}{\sqrt{d}}\right) V \in \mathbb{R}^{M \times d}, \text{ independent of } N \\
+&\text{output} = \mathrm{softmax}\!\left(\frac{Q K^\top}{\sqrt{d}}\right) V \in \mathbb{R}^{M \times d}, \text{ independent of } N \\
 &\text{cost} = O(M N d), \text{ versus } O(N^2 d) \text{ for self-attention over all patches}
 \end{aligned}
 ```
@@ -434,7 +434,7 @@ README lists three levels of multimodal RAG. Here is how each works in detail an
 ColPali feeds a page image through a VLM backbone and projects each output patch embedding to a small dimension (128). A page becomes about 1,024 vectors. The query is text, encoded into one 128-dimensional vector per query token. Score a page with MaxSim, the ColBERT operator:
 
 ```math
-\operatorname{score}(q, \text{page}) = \sum_{i \in \text{query tokens}} \; \max_{j \in \text{page patches}} \langle q_i, p_j \rangle
+\mathrm{score}(q, \text{page}) = \sum_{i \in \text{query tokens}} \; \max_{j \in \text{page patches}} \langle q_i, p_j \rangle
 ```
 
 ```python
@@ -781,7 +781,7 @@ Many VLMs answer "where is X?" by writing coordinates as text, usually a box $(x
 
 ### Intersection over union
 
-$\text{IoU} = \operatorname{area}(A \cap B) / \operatorname{area}(A \cup B)$. Two $10 \times 10$ boxes shifted 2 px: intersection 80, union 120, IoU 0.667. Shifted 4 px: $60 / 140 = 0.43$, below the common 0.5 threshold. The same 2 px shift on $100 \times 100$ boxes gives $9{,}800 / 10{,}200 = 0.96$. IoU is far stricter on small objects. **Acc@0.5** scores referring-expression tasks (one box per query, correct at IoU 0.5 or more). **Average precision** scores detection: rank predictions by confidence, mark true and false positives by greedy matching, integrate precision over recall. Example: two ground-truth objects and three predictions ranked true positive, false positive, true positive. Precision at each rank is $1, \tfrac{1}{2}, \tfrac{2}{3}$ and recall is $\tfrac{1}{2}, \tfrac{1}{2}, 1$. The precision envelope is $1, \tfrac{2}{3}, \tfrac{2}{3}$, so $\text{AP} = 0.5 \times 1 + 0.5 \times \tfrac{2}{3} = 0.833$. A confident false positive ranked first would give 0.667 for the same predictions. Exercise 6 builds all of this.
+$\text{IoU} = \mathrm{area}(A \cap B) / \mathrm{area}(A \cup B)$. Two $10 \times 10$ boxes shifted 2 px: intersection 80, union 120, IoU 0.667. Shifted 4 px: $60 / 140 = 0.43$, below the common 0.5 threshold. The same 2 px shift on $100 \times 100$ boxes gives $9{,}800 / 10{,}200 = 0.96$. IoU is far stricter on small objects. **Acc@0.5** scores referring-expression tasks (one box per query, correct at IoU 0.5 or more). **Average precision** scores detection: rank predictions by confidence, mark true and false positives by greedy matching, integrate precision over recall. Example: two ground-truth objects and three predictions ranked true positive, false positive, true positive. Precision at each rank is $1, \tfrac{1}{2}, \tfrac{2}{3}$ and recall is $\tfrac{1}{2}, \tfrac{1}{2}, 1$. The precision envelope is $1, \tfrac{2}{3}, \tfrac{2}{3}$, so $\text{AP} = 0.5 \times 1 + 0.5 \times \tfrac{2}{3} = 0.833$. A confident false positive ranked first would give 0.667 for the same predictions. Exercise 6 builds all of this.
 
 ### Check yourself
 
@@ -833,7 +833,7 @@ Mitigations, in the order I would try them: raise the effective resolution or cr
 
 ### Evaluating generation
 
-- **FID** compares real and generated images as Gaussians in an Inception feature space: $\lVert \mu_1 - \mu_2 \rVert^2 + \operatorname{Tr}\big(\Sigma_1 + \Sigma_2 - 2 (\Sigma_1 \Sigma_2)^{1/2}\big)$. It needs thousands of samples and says nothing about whether one image matches its prompt.
+- **FID** compares real and generated images as Gaussians in an Inception feature space: $\lVert \mu_1 - \mu_2 \rVert^2 + \mathrm{Tr}\big(\Sigma_1 + \Sigma_2 - 2 (\Sigma_1 \Sigma_2)^{1/2}\big)$. It needs thousands of samples and says nothing about whether one image matches its prompt.
 - **CLIPScore** is the scaled cosine similarity of image and prompt embeddings and inherits CLIP's weakness on counting and attribute binding. Compositional checks (GenEval-style) catch what it misses.
 - **Human preference** is the gold standard, aggregated with a Bradley-Terry or Elo model. A 100-point rating gap means the stronger model wins $1 / (1 + 10^{-100/400}) = 0.64$, or 64%, of the time, and 200 points gives 76%. Noise matters: 200 comparisons at a 55% win rate give a standard error of $\sqrt{0.55 \times 0.45 / 200} = 0.035$, or 3.5 points, so the 95% interval of about 48% to 62% includes parity.
 

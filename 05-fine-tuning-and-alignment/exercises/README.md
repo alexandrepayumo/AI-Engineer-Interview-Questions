@@ -75,7 +75,7 @@ A reward model scores response A at 1.8 and response B at 0.3. (a) What is the m
 
 <details><summary>Answer</summary>
 
-(a) Gap $1.5$, $\sigma(1.5) = 0.818$. (b) $\operatorname{logit}(0.9) = \ln 9 = 2.197$. (c) The Bradley-Terry loss depends only on differences between two responses to the same prompt, so adding any prompt-specific constant leaves the loss unchanged. The absolute level is not identified. This is why advantage estimates, baselines and DPO's implicit reward are all used as within-prompt comparisons.
+(a) Gap $1.5$, $\sigma(1.5) = 0.818$. (b) $\mathrm{logit}(0.9) = \ln 9 = 2.197$. (c) The Bradley-Terry loss depends only on differences between two responses to the same prompt, so adding any prompt-specific constant leaves the loss unchanged. The absolute level is not identified. This is why advantage estimates, baselines and DPO's implicit reward are all used as within-prompt comparisons.
 
 </details>
 

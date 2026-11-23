@@ -160,7 +160,7 @@ At the other end, the **LM head** maps the final hidden state $h$ (a vector of s
 
 ### The residual stream view
 
-A transformer block has the form $x \leftarrow x + \operatorname{Attn}(\operatorname{Norm}(x))$, then $x \leftarrow x + \operatorname{MLP}(\operatorname{Norm}(x))$. Unroll $L$ layers and the final hidden state is:
+A transformer block has the form $x \leftarrow x + \mathrm{Attn}(\mathrm{Norm}(x))$, then $x \leftarrow x + \mathrm{MLP}(\mathrm{Norm}(x))$. Unroll $L$ layers and the final hidden state is:
 
 ```math
 h_{\text{final}} = \text{embedding}(\text{token}) + \sum_{l=1}^{L} \big(\text{attn}_l \text{ output} + \text{mlp}_l \text{ output}\big)
@@ -235,7 +235,7 @@ Q &= X W_Q && \in \mathbb{R}^{n \times d_k} && \text{what am I looking for} \\
 K &= X W_K && \in \mathbb{R}^{n \times d_k} && \text{what do I offer for matching} \\
 V &= X W_V && \in \mathbb{R}^{n \times d_v} && \text{what do I hand over if selected} \\
 S &= \frac{Q K^\top}{\sqrt{d_k}} && \in \mathbb{R}^{n \times n} && \text{scores} \\
-P &= \operatorname{softmax}(S) && \in \mathbb{R}^{n \times n} && \text{row-wise, each row sums to 1} \\
+P &= \mathrm{softmax}(S) && \in \mathbb{R}^{n \times n} && \text{row-wise, each row sums to 1} \\
 O &= P V && \in \mathbb{R}^{n \times d_v}
 \end{aligned}
 ```
@@ -247,7 +247,7 @@ Row $i$ of $P$ says how much token $i$ draws from each token $j$. The output at 
 Assume the entries of $q$ and $k$ at initialisation are independent with mean 0 and variance 1. The score is $q \cdot k = \sum_{i=1}^{d_k} q_i k_i$. Each term $q_i k_i$ has mean 0 and variance $\mathbb{E}[q_i^2] \thinspace \mathbb{E}[k_i^2] = 1$. The terms are independent, so variances add:
 
 ```math
-\operatorname{Var}(q \cdot k) = d_k, \qquad \text{standard deviation} = \sqrt{d_k}
+\mathrm{Var}(q \cdot k) = d_k, \qquad \text{standard deviation} = \sqrt{d_k}
 ```
 
 A quick simulation with 20,000 random pairs gives variance 15.97 at $d_k = 16$, 63.3 at $d_k = 64$ and 257.8 at $d_k = 256$. Dividing by $\sqrt{d_k}$ gives variance $\approx 1$ in every case (0.998, 0.989, 1.007).
@@ -295,7 +295,7 @@ Failure modes of masking:
 One head with width d would compute one set of attention weights per position. Real language needs several relations at once (the subject of this verb, the antecedent of this pronoun, the previous token). Multi-head attention runs $h$ independent heads with $d_k = d / h$ and concatenates:
 
 ```math
-O = \operatorname{concat}(\text{head}_1, \ldots, \text{head}_h)\, W_O, \qquad W_O \in \mathbb{R}^{h d_v \times d}
+O = \mathrm{concat}(\text{head}_1, \ldots, \text{head}_h)\, W_O, \qquad W_O \in \mathbb{R}^{h d_v \times d}
 ```
 
 Counting cost, with $d = 4096$ and $h = 32$ so $d_k = 128$:
@@ -505,16 +505,16 @@ A modern decoder block is two residual sublayers:
 
 ```math
 \begin{aligned}
-x &\leftarrow x + \operatorname{Attention}(\operatorname{RMSNorm}(x)) \\
-x &\leftarrow x + \operatorname{MLP}(\operatorname{RMSNorm}(x))
+x &\leftarrow x + \mathrm{Attention}(\mathrm{RMSNorm}(x)) \\
+x &\leftarrow x + \mathrm{MLP}(\mathrm{RMSNorm}(x))
 \end{aligned}
 ```
 
-**Pre-norm versus post-norm.** The 2017 design computes $\operatorname{LayerNorm}(x + \operatorname{Sublayer}(x))$. Every layer's gradient has to pass through a norm on the way back. With post-norm, gradients near the output are large and shrink with depth, so training needs a careful learning-rate warmup and is fragile when deep. Pre-norm computes $x + \operatorname{Sublayer}(\operatorname{Norm}(x))$. The derivative of the block output with respect to its input is $I + (\text{something})$, so there is always an identity path from the loss to every layer, and training at 80 or more layers is stable. The cost: the stream grows with depth, so deep layers' contributions are relatively smaller, and a final norm is needed before the head.
+**Pre-norm versus post-norm.** The 2017 design computes $\mathrm{LayerNorm}(x + \mathrm{Sublayer}(x))$. Every layer's gradient has to pass through a norm on the way back. With post-norm, gradients near the output are large and shrink with depth, so training needs a careful learning-rate warmup and is fragile when deep. Pre-norm computes $x + \mathrm{Sublayer}(\mathrm{Norm}(x))$. The derivative of the block output with respect to its input is $I + (\text{something})$, so there is always an identity path from the loss to every layer, and training at 80 or more layers is stable. The cost: the stream grows with depth, so deep layers' contributions are relatively smaller, and a final norm is needed before the head.
 
-**RMSNorm** is $y = g \cdot x / \sqrt{\operatorname{mean}(x^2) + \epsilon}$ with a learned gain $g$, no mean subtraction and no bias. It is slightly cheaper than LayerNorm and works equally well in large models. Its parameter count is $d$ per norm.
+**RMSNorm** is $y = g \cdot x / \sqrt{\mathrm{mean}(x^2) + \epsilon}$ with a learned gain $g$, no mean subtraction and no bias. It is slightly cheaper than LayerNorm and works equally well in large models. Its parameter count is $d$ per norm.
 
-**MLP and SwiGLU.** The classic MLP is $\operatorname{down}(\operatorname{act}(\operatorname{up}(x)))$ with up: $d$ to $4d$, down: $4d$ to $d$, which has $2 \times d \times 4d = 8 d^2$ parameters. SwiGLU adds a gate: $\operatorname{down}(\operatorname{silu}(\operatorname{gate}(x)) \odot \operatorname{up}(x))$, with three matrices of shape $d \times f$, $d \times f$ and $f \times d$, so $3df$ parameters. To match the $8 d^2$ budget, $f = 8d/3 \approx 2.67d$. Real models vary: Llama-3-8B has $d = 4096$ and $f = 14336 = 3.5d$, which spends more of the budget on the MLP. The gate lets the layer multiply one linear projection of $x$ by a learned, input-dependent mask from another, and empirically this beats a plain activation at equal parameters.
+**MLP and SwiGLU.** The classic MLP is $\mathrm{down}(\mathrm{act}(\mathrm{up}(x)))$ with up: $d$ to $4d$, down: $4d$ to $d$, which has $2 \times d \times 4d = 8 d^2$ parameters. SwiGLU adds a gate: $\mathrm{down}(\mathrm{silu}(\mathrm{gate}(x)) \odot \mathrm{up}(x))$, with three matrices of shape $d \times f$, $d \times f$ and $f \times d$, so $3df$ parameters. To match the $8 d^2$ budget, $f = 8d/3 \approx 2.67d$. Real models vary: Llama-3-8B has $d = 4096$ and $f = 14336 = 3.5d$, which spends more of the budget on the MLP. The gate lets the layer multiply one linear projection of $x$ by a learned, input-dependent mask from another, and empirically this beats a plain activation at equal parameters.
 
 ### Counting parameters: a worked example
 
@@ -620,9 +620,9 @@ Pretraining maximises the likelihood of text under the model, factorised autoreg
 \text{loss} = -\frac{1}{T} \sum_{t=1}^{T} \log p_{\text{model}}(x_t \mid x_{<t})
 ```
 
-At each position, the model emits logits $z$ over $V$ tokens. The loss for the true next token $y$ is the **cross-entropy** $-\log \operatorname{softmax}(z) _y = -z_y + \log \sum_j \exp(z_j)$. With the causal mask, all $T$ positions are scored in one pass (teacher forcing: the true prefix is fed in, not the model's own samples).
+At each position, the model emits logits $z$ over $V$ tokens. The loss for the true next token $y$ is the **cross-entropy** $-\log \mathrm{softmax}(z) _y = -z_y + \log \sum_j \exp(z_j)$. With the causal mask, all $T$ positions are scored in one pass (teacher forcing: the true prefix is fed in, not the model's own samples).
 
-Numerical care: compute log-softmax as $(z - \max z) - \log \sum_j \exp(z_j - \max z)$. Taking softmax first and then the log fails for confident wrong predictions because the probability underflows to 0 and $\log 0 = -\infty$. [Exercise 3](exercises/README.md) implements this and the clean gradient: $\partial \text{loss} / \partial z = \operatorname{softmax}(z) - \operatorname{onehot}(y)$, divided by the number of scored positions.
+Numerical care: compute log-softmax as $(z - \max z) - \log \sum_j \exp(z_j - \max z)$. Taking softmax first and then the log fails for confident wrong predictions because the probability underflows to 0 and $\log 0 = -\infty$. [Exercise 3](exercises/README.md) implements this and the clean gradient: $\partial \text{loss} / \partial z = \mathrm{softmax}(z) - \mathrm{onehot}(y)$, divided by the number of scored positions.
 
 Three quantities describe the same number:
 
@@ -868,7 +868,7 @@ flowchart TD
     C --> O["Add to residual stream"]
 ```
 
-The router is one linear layer, $d \times E$. Probabilities are $\operatorname{softmax}(x W_g)$. The top $k$ indices are kept and their probabilities renormalised to sum to 1 to give the gates. (Variants apply softmax over only the selected logits, or use a sigmoid per expert.)
+The router is one linear layer, $d \times E$. Probabilities are $\mathrm{softmax}(x W_g)$. The top $k$ indices are kept and their probabilities renormalised to sum to 1 to give the gates. (Variants apply softmax over only the selected logits, or use a sigmoid per expert.)
 
 ### Parameter accounting: total versus active
 
@@ -903,7 +903,7 @@ L_{\text{aux}} = E \cdot \sum_{i=1}^{E} f_i \, P_i
 
 $f_i$ is a hard count and carries no gradient. $P_i$ is smooth and carries it. Their product pushes down the probability of overloaded experts. For perfectly uniform routing $f_i = P_i = 1/E$ and the loss is $E \times (E \times 1/E^2) = 1$. At total collapse ($k = 1$, everything to expert 0), $f_0 = P_0 = 1$ and the loss is $E$. So 1 is the minimum and $E$ the worst case, and it is added to the main loss with a small coefficient (often ~0.01). The auxiliary term competes with the main objective, so too large a coefficient hurts quality.
 
-**Router z-loss** penalises large router logits (mean over tokens of $(\operatorname{logsumexp}(z))^2$ for router logits $z$) to keep the routing softmax numerically stable.
+**Router z-loss** penalises large router logits (mean over tokens of $(\mathrm{logsumexp}(z))^2$ for router logits $z$) to keep the routing softmax numerically stable.
 
 **Auxiliary-loss-free balancing** (DeepSeek-V3): add a per-expert bias to the affinity scores *only when selecting* the top-k, and nudge the bias down for overloaded experts and up for underloaded ones after each step. The gate values still come from unbiased scores, so there is no gradient interference.
 

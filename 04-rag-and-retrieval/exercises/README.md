@@ -35,7 +35,7 @@ A corpus has $N = 10{,}000$ chunks and $\text{avgdl} = 100$ tokens. The term "th
 
 <details><summary>Answer</summary>
 
-$$\operatorname{IDF} = \ln\left(1 + \frac{10{,}000 - 10 + 0.5}{10 + 0.5}\right) = \ln(1 + 951.5) = 6.859$$
+$$\mathrm{IDF} = \ln\left(1 + \frac{10{,}000 - 10 + 0.5}{10 + 0.5}\right) = \ln(1 + 951.5) = 6.859$$
 
 $$\text{TF component} = \frac{2 \times 2.2}{2 + 1.2 \times (0.25 + 0.75 \times 2)} = \frac{4.4}{2 + 2.1} = 1.073$$
 

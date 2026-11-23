@@ -493,7 +493,7 @@ To quantise a tensor to 4 bits (16 levels) you need a map from real values to le
 \begin{aligned}
 \text{absmax}_b &= \max_{i \in b} \lvert w_i \rvert \\
 \tilde w_i &= w_i / \text{absmax}_b && \text{(now in } [-1, 1]\text{)} \\
-c_i &= \operatorname*{arg\,min}_k \lvert \ell_k - \tilde w_i \rvert && \text{(index of the nearest level, 4 bits)} \\
+c_i &= \arg\min_k \lvert \ell_k - \tilde w_i \rvert && \text{(index of the nearest level, 4 bits)} \\
 \hat w_i &= \ell_{c_i} \cdot \text{absmax}_b && \text{(dequantised value)}
 \end{aligned}
 ```
@@ -633,8 +633,8 @@ Hinton's formulation uses temperature $T$ to soften the distributions. Teacher l
 
 ```math
 \begin{aligned}
-T = 1: &\quad \operatorname{softmax}(z / T) = [0.867,\ 0.117,\ 0.016] \\
-T = 4: &\quad \operatorname{softmax}(z / T) = [0.506,\ 0.307,\ 0.186]
+T = 1: &\quad \mathrm{softmax}(z / T) = [0.867,\ 0.117,\ 0.016] \\
+T = 4: &\quad \mathrm{softmax}(z / T) = [0.506,\ 0.307,\ 0.186]
 \end{aligned}
 ```
 
@@ -772,7 +772,7 @@ A_t &= \sum_{l \ge 0} (\gamma \lambda)^l\, \delta_{t+l}
 ```math
 \begin{aligned}
 \rho_t &= \frac{\pi_{\text{new}}(y_t \mid \dots)}{\pi_{\text{old}}(y_t \mid \dots)} \\
-L &= \mathbb{E}\Big[\min\big(\rho_t A_t,\ \operatorname{clip}(\rho_t, 1 - \epsilon, 1 + \epsilon)\, A_t\big)\Big]
+L &= \mathbb{E}\Big[\min\big(\rho_t A_t,\ \mathrm{clip}(\rho_t, 1 - \epsilon, 1 + \epsilon)\, A_t\big)\Big]
 \end{aligned}
 ```
 
@@ -978,13 +978,13 @@ Where it applies: mathematics, code with tests, formal proofs, constrained forma
 PPO's critic exists to give a baseline: it estimates how good a state is so that the advantage $A = \text{return} - V(s)$ has low variance. GRPO instead gets the baseline from **the other samples for the same prompt**. For each prompt $x$, sample a group of $G$ responses from the current policy (old policy), score each with the reward function to get $r_1, \dots, r_G$, and compute:
 
 ```math
-A_i = \frac{r_i - \operatorname{mean}(r_1, \dots, r_G)}{\operatorname{std}(r_1, \dots, r_G) + \epsilon}
+A_i = \frac{r_i - \mathrm{mean}(r_1, \dots, r_G)}{\mathrm{std}(r_1, \dots, r_G) + \epsilon}
 ```
 
 Every token in response $i$ receives the same advantage $A_i$. There is no value network. The objective keeps PPO's clipped ratio and a KL term to the reference, where $o_i$ is response $i$ and $\lvert o_i \rvert$ its length in tokens:
 
 ```math
-J = \mathbb{E}\left[\frac{1}{G} \sum_{i=1}^{G} \frac{1}{\lvert o_i \rvert} \sum_{t=1}^{\lvert o_i \rvert} \Big(\min\big(\rho_{i,t} A_i,\ \operatorname{clip}(\rho_{i,t}, 1 - \epsilon, 1 + \epsilon)\, A_i\big) - \beta\, \mathrm{KL}_{i,t}\Big)\right]
+J = \mathbb{E}\left[\frac{1}{G} \sum_{i=1}^{G} \frac{1}{\lvert o_i \rvert} \sum_{t=1}^{\lvert o_i \rvert} \Big(\min\big(\rho_{i,t} A_i,\ \mathrm{clip}(\rho_{i,t}, 1 - \epsilon, 1 + \epsilon)\, A_i\big) - \beta\, \mathrm{KL}_{i,t}\Big)\right]
 ```
 
 Worked example. Eight samples, three correct:

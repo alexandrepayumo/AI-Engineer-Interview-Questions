@@ -234,7 +234,7 @@ Nearest-neighbour selection has a failure mode. If your pool has seven near-iden
 **Maximal Marginal Relevance (MMR)** (Carbonell and Goldstein, 1998) fixes this by greedily choosing items that are relevant to the query and different from what is already chosen:
 
 ```math
-\operatorname{score}(d) = \lambda \, \operatorname{sim}(\text{query}, d) - (1 - \lambda) \max_{s \in \text{selected}} \operatorname{sim}(d, s)
+\mathrm{score}(d) = \lambda \, \mathrm{sim}(\text{query}, d) - (1 - \lambda) \max_{s \in \text{selected}} \mathrm{sim}(d, s)
 ```
 
 $\lambda = 1$ is plain top-k. $\lambda = 0$ ignores relevance and maximises spread. Typical values are 0.5 to 0.8.
@@ -245,9 +245,9 @@ Unit vectors in 2D (cosine is the dot product). Query $q = (1, 0)$. Three candid
 
 ```math
 \begin{aligned}
-a &= (0.90,\ 0.436) && \operatorname{sim}(q, a) = 0.90 \\
-b &= (0.89,\ 0.456) && \operatorname{sim}(q, b) = 0.89 && a \cdot b = 0.9998 \quad \text{(near-duplicate of } a\text{)} \\
-c &= (0.80,\ -0.60) && \operatorname{sim}(q, c) = 0.80 && a \cdot c = 0.458
+a &= (0.90,\ 0.436) && \mathrm{sim}(q, a) = 0.90 \\
+b &= (0.89,\ 0.456) && \mathrm{sim}(q, b) = 0.89 && a \cdot b = 0.9998 \quad \text{(near-duplicate of } a\text{)} \\
+c &= (0.80,\ -0.60) && \mathrm{sim}(q, c) = 0.80 && a \cdot c = 0.458
 \end{aligned}
 ```
 
@@ -255,8 +255,8 @@ With $\lambda = 0.5$, round 1 picks $a$ (highest relevance, no redundancy yet). 
 
 ```math
 \begin{aligned}
-\operatorname{score}(b) &= 0.5 \cdot 0.89 - 0.5 \cdot 0.9998 = 0.445 - 0.4999 = -0.055 \\
-\operatorname{score}(c) &= 0.5 \cdot 0.80 - 0.5 \cdot 0.458 = 0.400 - 0.229 = 0.171
+\mathrm{score}(b) &= 0.5 \cdot 0.89 - 0.5 \cdot 0.9998 = 0.445 - 0.4999 = -0.055 \\
+\mathrm{score}(c) &= 0.5 \cdot 0.80 - 0.5 \cdot 0.458 = 0.400 - 0.229 = 0.171
 \end{aligned}
 ```
 

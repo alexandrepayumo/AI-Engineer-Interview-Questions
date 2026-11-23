@@ -443,7 +443,7 @@ If two requests start with the same tokens, the keys and values of those tokens 
 The mechanism at block granularity:
 
 ```math
-\operatorname{hash}(\text{block}_i) = H\big(\operatorname{hash}(\text{block}_{i-1}), \ \text{tokens in block}_i\big) \qquad \text{(chained hash)}
+\mathrm{hash}(\text{block}_i) = H\big(\mathrm{hash}(\text{block}_{i-1}), \ \text{tokens in block}_i\big) \qquad \text{(chained hash)}
 ```
 
 A block is identified by its own tokens **and everything before it**. The chain matters: the tokens [4, 5, 6, 7] after one prefix have different K and V than the same tokens after another prefix. On a new request, compute the chain of hashes for its full blocks, look each up, and reuse the longest contiguous run of hits from the start. Prefill then runs only for the remaining tokens.
@@ -682,8 +682,8 @@ Per-channel scales (one per output row) are the intermediate option and are stan
 
 ### Symmetric versus asymmetric
 
-- **Symmetric**: $q = \operatorname{round}(x / s)$, zero maps to zero, range $[-a_{\max}, +a_{\max}]$. Simple and fast.
-- **Asymmetric**: $q = \operatorname{round}(x / s) + z$ with a zero point $z$, range $[x_{\min}, x_{\max}]$. It spends all levels on the observed range.
+- **Symmetric**: $q = \mathrm{round}(x / s)$, zero maps to zero, range $[-a_{\max}, +a_{\max}]$. Simple and fast.
+- **Asymmetric**: $q = \mathrm{round}(x / s) + z$ with a zero point $z$, range $[x_{\min}, x_{\max}]$. It spends all levels on the observed range.
 
 For one-sided data such as ReLU outputs in $[0, 6]$, symmetric INT8 only uses the positive half, 128 levels instead of 256, so its step is twice as large and MSE four times larger. Asymmetric quantisation fixes that. Weights are roughly symmetric, so weight quantisation is mostly symmetric, while some activation quantisation needs the zero point.
 

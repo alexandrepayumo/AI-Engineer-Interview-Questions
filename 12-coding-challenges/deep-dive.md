@@ -225,7 +225,7 @@ Fancy indexing with two index arrays pairs them elementwise. It does not form a 
 **Softmax.** $\exp(x)$ overflows when the result exceeds the largest finite float: input above about 88.7 in float32 and about 709.8 in float64. Subtracting the row max $m$ leaves every exponent at most 0:
 
 ```math
-\operatorname{softmax}(x)_i = \frac{\exp(x_i - m)}{\sum_j \exp(x_j - m)}
+\mathrm{softmax}(x)_i = \frac{\exp(x_i - m)}{\sum_j \exp(x_j - m)}
 ```
 
 The factor $\exp(-m)$ appears in numerator and denominator and cancels, so the result is mathematically identical. The largest term is exactly 1, so the denominator is at least 1 and never zero. Example: for `[1000, 1001]` the naive version computes `inf / inf = nan`. The stable version computes `exp([-1, 0]) = [0.368, 1]` and returns `[0.269, 0.731]`.
@@ -233,18 +233,18 @@ The factor $\exp(-m)$ appears in numerator and denominator and cancels, so the r
 **Log-sum-exp.** The same shift works inside a log:
 
 ```math
-\operatorname{logsumexp}(x) = m + \log \sum_i \exp(x_i - m)
+\mathrm{logsumexp}(x) = m + \log \sum_i \exp(x_i - m)
 ```
 
 For `[1000, 1000]`: $m = 1000$, the sum is $1 + 1 = 2$, and the answer is $1000 + \log 2 = 1000.693$. The naive `log(sum(exp(x)))` returns `inf`.
 
 Two details matter. First, if a whole row is `-inf` (every token masked), `m = -inf` and `x - m` is `nan`. Replace a non-finite max with 0 for the shift, so the sum is 0 and the result is `-inf` instead of `nan`. Second, `log_softmax = x - logsumexp(x)` is more accurate than `log(softmax(x))`, because a probability that underflows to 0 has `log = -inf` while the log-space value is a finite large negative number.
 
-**Cross-entropy.** Never form probabilities and then take a log. Compute `-(logits[target] - logsumexp(logits))`. The gradient with respect to logits is $\operatorname{softmax}(\text{logits}) - \operatorname{onehot}(\text{target})$, divided by $N$ for a mean. That gradient is the reason frameworks fuse softmax and cross-entropy into one operation.
+**Cross-entropy.** Never form probabilities and then take a log. Compute `-(logits[target] - logsumexp(logits))`. The gradient with respect to logits is $\mathrm{softmax}(\text{logits}) - \mathrm{onehot}(\text{target})$, divided by $N$ for a mean. That gradient is the reason frameworks fuse softmax and cross-entropy into one operation.
 
-**softplus and logsigmoid.** $\log(1 + e^x)$ overflows for large $x$. Use `max(x, 0) + log1p(exp(-|x|))`. The exponent is never positive, and `log1p` stays accurate when its argument is tiny. For $x = -50$ the naive `log(1 + exp(-50))` rounds `1 + 1.9e-22` to exactly 1 and returns 0, while `log1p` returns `1.9e-22`. Then $\operatorname{logsigmoid}(x) = -\operatorname{softplus}(-x)$ and binary cross-entropy from a raw score $z$ and label $y$ is `max(z, 0) - z*y + log1p(exp(-|z|))`.
+**softplus and logsigmoid.** $\log(1 + e^x)$ overflows for large $x$. Use `max(x, 0) + log1p(exp(-|x|))`. The exponent is never positive, and `log1p` stays accurate when its argument is tiny. For $x = -50$ the naive `log(1 + exp(-50))` rounds `1 + 1.9e-22` to exactly 1 and returns 0, while `log1p` returns `1.9e-22`. Then $\mathrm{logsigmoid}(x) = -\mathrm{softplus}(-x)$ and binary cross-entropy from a raw score $z$ and label $y$ is `max(z, 0) - z*y + log1p(exp(-|z|))`.
 
-**Where epsilon goes.** Layer norm divides by $\sqrt{\sigma^2 + \epsilon}$. The epsilon sits inside the square root. Compare variance $\sigma^2 = 10^{-6}$ and $\epsilon = 10^{-5}$: $1 / \sqrt{\sigma^2 + \epsilon} = 301.5$, while $1 / (\sqrt{\sigma^2} + \epsilon) = 990.1$. The second form behaves differently for small variances, and it does not match what the original layer was trained with. In `rms_norm` the same rule holds with $\operatorname{mean}(x^2)$ in place of the variance. In a cosine similarity, the equivalent guard is clamping the norm, $x / \max(\lVert x \rVert, \epsilon)$, so a zero vector maps to a zero vector instead of `nan`.
+**Where epsilon goes.** Layer norm divides by $\sqrt{\sigma^2 + \epsilon}$. The epsilon sits inside the square root. Compare variance $\sigma^2 = 10^{-6}$ and $\epsilon = 10^{-5}$: $1 / \sqrt{\sigma^2 + \epsilon} = 301.5$, while $1 / (\sqrt{\sigma^2} + \epsilon) = 990.1$. The second form behaves differently for small variances, and it does not match what the original layer was trained with. In `rms_norm` the same rule holds with $\mathrm{mean}(x^2)$ in place of the variance. In a cosine similarity, the equivalent guard is clamping the norm, $x / \max(\lVert x \rVert, \epsilon)$, so a zero vector maps to a zero vector instead of `nan`.
 
 **dtype traps.**
 
@@ -290,7 +290,7 @@ Challenges 01, 04, 05, 06 and 07 cover the pieces of a decoder-only transformer.
 Scaled dot-product attention is:
 
 ```math
-\operatorname{Attention}(Q, K, V) = \operatorname{softmax}\left(\frac{Q K^\top}{\sqrt{d_k}} + \text{mask}\right) V
+\mathrm{Attention}(Q, K, V) = \mathrm{softmax}\left(\frac{Q K^\top}{\sqrt{d_k}} + \text{mask}\right) V
 ```
 
 Each query scores every key, the scores become weights, and the output is the weighted average of the values.
@@ -300,7 +300,7 @@ A tiny worked example. One query $q = [1, 0]$, two keys $k_1 = [1, 0]$ and $k_2 
 ```math
 \begin{aligned}
 \text{scores} &= [q \cdot k_1,\ q \cdot k_2] / \sqrt{2} = [0.7071,\ 0] \\
-\text{weights} &= \operatorname{softmax}(\text{scores}) = [0.6698,\ 0.3302] \\
+\text{weights} &= \mathrm{softmax}(\text{scores}) = [0.6698,\ 0.3302] \\
 \text{output} &= 0.6698\, v_1 + 0.3302\, v_2 = [6.698,\ 3.302]
 \end{aligned}
 ```
@@ -319,8 +319,8 @@ LayerNorm subtracts the mean and divides by the standard deviation over the feat
 
 ```math
 \begin{aligned}
-\operatorname{LayerNorm}(x) &= \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} \odot \gamma + \beta \\
-\operatorname{RMSNorm}(x) &= \frac{x}{\sqrt{\operatorname{mean}(x^2) + \epsilon}} \odot \gamma
+\mathrm{LayerNorm}(x) &= \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} \odot \gamma + \beta \\
+\mathrm{RMSNorm}(x) &= \frac{x}{\sqrt{\mathrm{mean}(x^2) + \epsilon}} \odot \gamma
 \end{aligned}
 ```
 
@@ -432,7 +432,7 @@ The standard order of operations on a logit vector:
 4. Softmax over what is left (this renormalises).
 5. Draw one token.
 
-**Temperature.** $\operatorname{softmax}(\text{logits} / T)$. As $T \to 0$ the distribution approaches one-hot at the argmax, so implement $T = 0$ as greedy and do not divide by zero. As $T \to \infty$ it approaches uniform. Temperature goes before truncation because it changes which tokens fall inside the nucleus: a lower $T$ shrinks it.
+**Temperature.** $\mathrm{softmax}(\text{logits} / T)$. As $T \to 0$ the distribution approaches one-hot at the argmax, so implement $T = 0$ as greedy and do not divide by zero. As $T \to \infty$ it approaches uniform. Temperature goes before truncation because it changes which tokens fall inside the nucleus: a lower $T$ shrinks it.
 
 **Top-k** keeps the $k$ highest logits. Handle $k \ge V$ (keep all) and $k = 1$ (greedy). **Top-p (nucleus)** keeps the smallest set of top tokens whose cumulative probability reaches $p$. Worked example with probabilities `[0.5, 0.3, 0.1, 0.06, 0.04]` and $p = 0.85$:
 
@@ -504,7 +504,7 @@ sequenceDiagram
     T->>O: all accepted: add bonus token from p(g+1)
 ```
 
-**The acceptance rule.** For each drafted token $x$ at position $i$, draw $u \sim U(0, 1)$ and accept if $u \lt \min(1, p(x) / q(x))$, where $p$ is the target and $q$ the draft probability of $x$. On the first rejection, discard the rest of the draft and sample one token from the **residual distribution** $\operatorname{norm}(\max(p - q, 0))$. If all $\gamma$ are accepted, sample a bonus token from the target's distribution at position $\gamma + 1$, which the same pass already computed. Each step therefore emits between 1 and $\gamma + 1$ tokens.
+**The acceptance rule.** For each drafted token $x$ at position $i$, draw $u \sim U(0, 1)$ and accept if $u \lt \min(1, p(x) / q(x))$, where $p$ is the target and $q$ the draft probability of $x$. On the first rejection, discard the rest of the draft and sample one token from the **residual distribution** $\mathrm{norm}(\max(p - q, 0))$. If all $\gamma$ are accepted, sample a bonus token from the target's distribution at position $\gamma + 1$, which the same pass already computed. Each step therefore emits between 1 and $\gamma + 1$ tokens.
 
 **Why it is lossless.** The claim: the emitted token is distributed exactly as $p$. For any token $t$:
 
@@ -558,7 +558,7 @@ Temperature reshapes the probabilities, and top-p is defined on those probabilit
 
 <details><summary>Answer</summary>
 
-$\min(1, 0.1 / 0.4) = 0.25$. On rejection the rest of the draft is discarded and one token is sampled from $\operatorname{norm}(\max(p - q, 0))$, which puts weight only on tokens the target likes more than the draft does.
+$\min(1, 0.1 / 0.4) = 0.25$. On rejection the rest of the draft is discarded and one token is sampled from $\mathrm{norm}(\max(p - q, 0))$, which puts weight only on tokens the target likes more than the draft does.
 
 </details>
 
@@ -793,7 +793,7 @@ $n - c = 1 \lt k = 2$, so every pair contains at least one success: pass@2 = 1.0
 In a timed round the tests are your instruments. Use five kinds, from cheapest to strongest.
 
 1. **Hand oracles.** A value you computed on paper, such as softmax of `[2, 1, 0]` or the top-p example in Part 4.
-2. **Invariants.** Properties that hold for all inputs: probabilities sum to 1, softmax unchanged by adding a constant, $\operatorname{logsumexp}(x + c) = \operatorname{logsumexp}(x) + c$, causal outputs unchanged when the future changes, RMSNorm unchanged under scaling of the input (up to eps), cosine similarity unchanged under scaling, rows independent of other batch rows, retrieval returns the query document first.
+2. **Invariants.** Properties that hold for all inputs: probabilities sum to 1, softmax unchanged by adding a constant, $\mathrm{logsumexp}(x + c) = \mathrm{logsumexp}(x) + c$, causal outputs unchanged when the future changes, RMSNorm unchanged under scaling of the input (up to eps), cosine similarity unchanged under scaling, rows independent of other batch rows, retrieval returns the query document first.
 3. **Reference comparison.** A slow loop version, the same model without a cache, merged against unmerged LoRA, streamed against batch parsing. Test the fast path against the slow path on random inputs under a fixed seed.
 4. **Gradient checks.** Compare the analytic gradient with central differences, in float64:
 

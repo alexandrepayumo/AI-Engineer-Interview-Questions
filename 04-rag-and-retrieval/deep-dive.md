@@ -51,9 +51,9 @@ For vectors $a$ and $b$:
 
 ```math
 \begin{aligned}
-\operatorname{dot}(a, b) &= \sum_i a_i b_i = \lVert a \rVert \thinspace \lVert b \rVert \cos\theta \\
-\cos(a, b) &= \frac{\operatorname{dot}(a, b)}{\lVert a \rVert \thinspace \lVert b \rVert} && \text{depends on angle only} \\
-\operatorname{L2}(a, b)^2 &= \lVert a \rVert^2 + \lVert b \rVert^2 - 2 \operatorname{dot}(a, b)
+\mathrm{dot}(a, b) &= \sum_i a_i b_i = \lVert a \rVert \thinspace \lVert b \rVert \cos\theta \\
+\cos(a, b) &= \frac{\mathrm{dot}(a, b)}{\lVert a \rVert \thinspace \lVert b \rVert} && \text{depends on angle only} \\
+\mathrm{L2}(a, b)^2 &= \lVert a \rVert^2 + \lVert b \rVert^2 - 2 \mathrm{dot}(a, b)
 \end{aligned}
 ```
 
@@ -74,8 +74,8 @@ If every vector has length 1, then $\lVert a \rVert = \lVert b \rVert = 1$ and:
 
 ```math
 \begin{aligned}
-\operatorname{dot}(a, b) &= \cos(a, b) \\
-\operatorname{L2}(a, b)^2 &= 2 - 2 \cos(a, b)
+\mathrm{dot}(a, b) &= \cos(a, b) \\
+\mathrm{L2}(a, b)^2 &= 2 - 2 \cos(a, b)
 \end{aligned}
 ```
 
@@ -87,7 +87,7 @@ So on unit vectors, maximising cosine, maximising dot and minimising L2 give the
 
 ### Maximum inner product search is not a metric search
 
-Dot product on unnormalised vectors is not a distance: $\operatorname{dot}(a, a)$ is not the maximum over $b$, and the triangle inequality fails. Graph and tree indexes assume a metric. The standard fix is to augment each database vector $x$ with one extra coordinate so that L2 search on the augmented vectors equals inner-product search on the originals:
+Dot product on unnormalised vectors is not a distance: $\mathrm{dot}(a, a)$ is not the maximum over $b$, and the triangle inequality fails. Graph and tree indexes assume a metric. The standard fix is to augment each database vector $x$ with one extra coordinate so that L2 search on the augmented vectors equals inner-product search on the originals:
 
 ```python
 import numpy as np
@@ -101,7 +101,7 @@ def mips_to_l2(X: np.ndarray, q: np.ndarray):
     return X_aug, q_aug
 ```
 
-Every augmented row has squared norm $M^2$ (the `M2` in the code). Then $\lVert q - x \rVert^2 = \lVert q \rVert^2 + M^2 - 2 \operatorname{dot}(q, x)$, and since $\lVert q \rVert^2$ and $M^2$ are constants for a given query, the L2 ranking equals the dot-product ranking.
+Every augmented row has squared norm $M^2$ (the `M2` in the code). Then $\lVert q - x \rVert^2 = \lVert q \rVert^2 + M^2 - 2 \mathrm{dot}(q, x)$, and since $\lVert q \rVert^2$ and $M^2$ are constants for a given query, the L2 ranking equals the dot-product ranking.
 
 ### Why high dimensions behave strangely
 
@@ -173,9 +173,9 @@ For a query with terms $t$, a document $D$ of length $\lvert D \rvert$ tokens, a
 
 ```math
 \begin{aligned}
-\operatorname{score}(D, Q) &= \sum_{t \in Q} \operatorname{IDF}(t) \cdot \operatorname{TF}(t, D) \\
-\operatorname{IDF}(t) &= \ln\left(1 + \frac{N - n_t + 0.5}{n_t + 0.5}\right) \\
-\operatorname{TF}(t, D) &= \frac{f \cdot (k_1 + 1)}{f + k_1 \cdot \left(1 - b + b \cdot \lvert D \rvert / \text{avgdl}\right)}
+\mathrm{score}(D, Q) &= \sum_{t \in Q} \mathrm{IDF}(t) \cdot \mathrm{TF}(t, D) \\
+\mathrm{IDF}(t) &= \ln\left(1 + \frac{N - n_t + 0.5}{n_t + 0.5}\right) \\
+\mathrm{TF}(t, D) &= \frac{f \cdot (k_1 + 1)}{f + k_1 \cdot \left(1 - b + b \cdot \lvert D \rvert / \text{avgdl}\right)}
 \end{aligned}
 ```
 
@@ -297,7 +297,7 @@ It approaches $k_1 + 1$ (2.2 for $k_1 = 1.2$) at average length. Repeating a ter
 
 <details><summary>Answer</summary>
 
-$n_t = N = 1000$, so $\operatorname{IDF} = \ln(1 + 0.5 / 1000.5) = \ln(1.0004998) \approx 0.0005$. Essentially zero, and never negative.
+$n_t = N = 1000$, so $\mathrm{IDF} = \ln(1 + 0.5 / 1000.5) = \ln(1.0004998) \approx 0.0005$. Essentially zero, and never negative.
 
 </details>
 
@@ -342,7 +342,7 @@ Take a batch of $B$ (query, positive document) pairs. Encode all of them, giving
 ```math
 \begin{aligned}
 \text{logits}_{ij} &= S_{ij} / \tau \\
-p_{ij} &= \operatorname{softmax}_j\big(\text{logits}_{ij}\big) \\
+p_{ij} &= \mathrm{softmax}_j\big(\text{logits}_{ij}\big) \\
 \mathcal{L} &= -\frac{1}{B} \sum_i \log p_{ii}
 \end{aligned}
 ```
@@ -586,7 +586,7 @@ Dense and lexical retrievers fail on different queries. Dense fails on exact str
 RRF ignores scores and uses only ranks:
 
 ```math
-\operatorname{RRF}(d) = \sum_{r} \frac{1}{k + \operatorname{rank}_r(d)} \qquad \text{(rank starts at 1, } k = 60 \text{ by default)}
+\mathrm{RRF}(d) = \sum_{r} \frac{1}{k + \mathrm{rank}_r(d)} \qquad \text{(rank starts at 1, } k = 60 \text{ by default)}
 ```
 
 A document absent from a ranking contributes nothing from it. Worked example, two rankings:
@@ -621,7 +621,7 @@ With $k = 1$, rank 1 is worth 50% more than rank 2, so a single retriever's top 
 
 ### Why not mix scores?
 
-Weighted score fusion, $\alpha \cdot \operatorname{norm}(\text{bm25}) + (1 - \alpha) \cdot \operatorname{norm}(\text{dense})$, can beat RRF when tuned, but it has real pitfalls. Take four candidates:
+Weighted score fusion, $\alpha \cdot \mathrm{norm}(\text{bm25}) + (1 - \alpha) \cdot \mathrm{norm}(\text{dense})$, can beat RRF when tuned, but it has real pitfalls. Take four candidates:
 
 ```text
 BM25 raw:   X 18.2   Y 7.1   Z 6.9   W 6.8
@@ -650,7 +650,7 @@ Y's fused score rose from 0.513 to 0.568 although nothing about Y changed. Min-m
 - Z-score normalisation reduces but does not remove the issue, and assumes roughly Gaussian scores.
 - Mixed units hide a mis-calibration bug: an $\alpha$ tuned on one corpus does not transfer when the embedder or the BM25 analyser changes.
 
-RRF has its own costs: it throws away score magnitude (a confident, huge BM25 margin counts the same as a marginal one), and it behaves oddly if one input list is noise, since its ranks still add. A useful middle path is **weighted RRF**, which scores each list as $w_r / (k + \operatorname{rank})$, or fusing scores only after calibrating each retriever on labelled data. The usual order of preference: RRF as the default, weighted RRF once a golden set shows one leg deserves more weight, learned score fusion only when you have enough labelled queries to justify it.
+RRF has its own costs: it throws away score magnitude (a confident, huge BM25 margin counts the same as a marginal one), and it behaves oddly if one input list is noise, since its ranks still add. A useful middle path is **weighted RRF**, which scores each list as $w_r / (k + \mathrm{rank})$, or fusing scores only after calibrating each retriever on labelled data. The usual order of preference: RRF as the default, weighted RRF once a golden set shows one leg deserves more weight, learned score fusion only when you have enough labelled queries to justify it.
 
 ### Operational notes
 
@@ -722,15 +722,15 @@ The funnel arithmetic: the reranker can only reorder what the first stage return
 ColBERT keeps one embedding per token. The query has $n_q$ token vectors $Q_i$ and a document has $n_d$ token vectors $D_j$ (normalised). The score is MaxSim:
 
 ```math
-\operatorname{score}(Q, D) = \sum_{i=1}^{n_q} \max_{1 \le j \le n_d} \operatorname{dot}(Q_i, D_j)
+\mathrm{score}(Q, D) = \sum_{i=1}^{n_q} \max_{1 \le j \le n_d} \mathrm{dot}(Q_i, D_j)
 ```
 
 Each query token picks its best match anywhere in the document, and the matches are summed. Document token vectors are computed offline, so only the query is encoded at search time, but scoring is token-level. Exercise 5 implements this.
 
 Worked example. Query tokens are $e_0$ and $e_1$ (unit axes). Document A has tokens $e_0, e_1, e_5, e_6$. Document B has four copies of $(e_0 + e_1)/\sqrt{2}$.
 
-- $\operatorname{MaxSim}(Q, A) = 1 + 1 = 2.0$ (each query token has an exact match).
-- $\operatorname{MaxSim}(Q, B) = 0.707 + 0.707 = 1.414$.
+- $\mathrm{MaxSim}(Q, A) = 1 + 1 = 2.0$ (each query token has an exact match).
+- $\mathrm{MaxSim}(Q, B) = 0.707 + 0.707 = 1.414$.
 - A single mean-pooled vector reverses the order: the mean of B equals the mean of the query direction, cosine 1.0, while A's mean is diluted by $e_5$ and $e_6$, cosine 0.707.
 
 MaxSim rewards a document that contains each needed concept somewhere, regardless of what else it contains, and the per-token maxima show *why* a document matched, which helps debugging. The cost is storage: $1\text{M documents} \times 200\ \text{tokens} \times 128\ \text{dimensions} \times 2\ \text{bytes} = 51.2\ \text{GB}$ in float16, against 256 MB for one 128-dimension vector per document, a $200\times$ ratio. Practical systems prune tokens, quantise and cluster token vectors, and use a cheap candidate-generation step before full MaxSim. The same idea over page-image patches is the basis of visual document retrievers.

@@ -69,7 +69,7 @@ When a score moves between two runs, at least four things may have caused it:
 Example sampling and generation sampling can be separated with arithmetic. Let item $i$ have a true pass probability $q_i$ (the chance a fresh sample passes). The population pass rate $p$ is the mean of the $q_i$. Scoring each of $n$ items once, the variance of the mean score is
 
 ```math
-\operatorname{Var}(\text{mean}) = \frac{1}{n}\Big[\underbrace{\operatorname{Var}_i(q_i)}_{\text{item difficulty}} + \underbrace{\mathbb{E}_i\big[q_i(1-q_i)\big]}_{\text{generation noise}}\Big]
+\mathrm{Var}(\text{mean}) = \frac{1}{n}\Big[\underbrace{\mathrm{Var}_i(q_i)}_{\text{item difficulty}} + \underbrace{\mathbb{E}_i\big[q_i(1-q_i)\big]}_{\text{generation noise}}\Big]
 ```
 
 The sum in brackets equals $p(1-p)$, the familiar binomial variance, but the split matters.
@@ -78,7 +78,7 @@ Worked example. Half the items are easy ($q = 1.0$) and half are hard but passab
 
 ```math
 \begin{aligned}
-\operatorname{Var}_i(q_i) &= 0.5 \times (1.0-0.8)^2 + 0.5 \times (0.6-0.8)^2 = 0.04 \\
+\mathrm{Var}_i(q_i) &= 0.5 \times (1.0-0.8)^2 + 0.5 \times (0.6-0.8)^2 = 0.04 \\
 \mathbb{E}_i\big[q_i(1-q_i)\big] &= 0.5 \times 0 + 0.5 \times 0.24 = 0.12 \\
 \text{total} &= 0.16 = 0.8 \times 0.2 && \text{(matches } p(1-p)\text{)}
 \end{aligned}
@@ -87,7 +87,7 @@ Worked example. Half the items are easy ($q = 1.0$) and half are hard but passab
 With $n = 100$ and one sample per item, $\text{SE} = \sqrt{0.16/100} = 0.040$. Now draw $k = 5$ samples per item and average them. The generation term shrinks by $k$:
 
 ```math
-\operatorname{Var}(\text{mean}) = \frac{1}{100}\Big(0.04 + \frac{0.12}{5}\Big) = 0.00064 \quad\Rightarrow\quad \text{SE} = 0.0253
+\mathrm{Var}(\text{mean}) = \frac{1}{100}\Big(0.04 + \frac{0.12}{5}\Big) = 0.00064 \quad\Rightarrow\quad \text{SE} = 0.0253
 ```
 
 The SE drops from 4.0 to 2.5 points. It cannot drop below $\sqrt{0.04/100} = 0.020$ (2.0 points) however many samples you draw, because the remaining variance comes from which 100 items you picked. Only more items reduce that floor. This is the first practical rule of eval statistics: **repeat samples to average out generation noise, add items to reduce sampling noise, and know which one you are limited by.**
@@ -133,7 +133,7 @@ $\text{SE} = \sqrt{0.8 \times 0.2 / 100} = 0.04$, so the 95% interval is roughly
 
 <details><summary>Answer</summary>
 
-$\operatorname{Var} = \tfrac{1}{100} \times (0.04 + 0.12/20) = 0.00046$, $\text{SE} = 0.0214$. Going from 5 to 20 samples moves SE only from 2.53 to 2.14 points because the item-difficulty floor of 2.0 points dominates. Spend further budget on more items.
+$\mathrm{Var} = \tfrac{1}{100} \times (0.04 + 0.12/20) = 0.00046$, $\text{SE} = 0.0214$. Going from 5 to 20 samples moves SE only from 2.53 to 2.14 points because the item-difficulty floor of 2.0 points dominates. Spend further budget on more items.
 
 </details>
 
@@ -651,13 +651,13 @@ A is right on 100 + 8 = 108 items, so A scores 0.54. B is right on 100 + 20 = 12
 
 **Unpaired view.** Treat the two accuracies as independent samples. SE of each is about $\sqrt{0.54 \times 0.46 / 200} = 0.035$ and $\sqrt{0.6 \times 0.4 / 200} = 0.0346$. The SE of the difference is $\sqrt{0.035^2 + 0.0346^2} = 0.0492$, so the 95% interval is $0.06 \pm 0.096$, which includes zero ($z = 1.22$, $p \approx 0.22$).
 
-**Paired view.** Only the 28 items on which the systems disagree carry information about the difference. The 100 items both get right and the 72 both get wrong cancel out. The per-item difference $d$ has $d = +1$ on 20 items, $-1$ on 8 items, and 0 on 172. Mean $\bar d = 12/200 = 0.06$. $\mathbb{E}[d^2] = 28/200 = 0.14$, so $\operatorname{Var}(d) = 0.14 - 0.0036 = 0.1364$ and $\text{SE} = \sqrt{0.1364 / 200} = 0.0261$. The interval is $0.06 \pm 0.051$, or (0.009, 0.111). Zero is excluded.
+**Paired view.** Only the 28 items on which the systems disagree carry information about the difference. The 100 items both get right and the 72 both get wrong cancel out. The per-item difference $d$ has $d = +1$ on 20 items, $-1$ on 8 items, and 0 on 172. Mean $\bar d = 12/200 = 0.06$. $\mathbb{E}[d^2] = 28/200 = 0.14$, so $\mathrm{Var}(d) = 0.14 - 0.0036 = 0.1364$ and $\text{SE} = \sqrt{0.1364 / 200} = 0.0261$. The interval is $0.06 \pm 0.051$, or (0.009, 0.111). Zero is excluded.
 
 Same data, opposite conclusions. The shared difficulty of items inflated the unpaired variance. This is the single most useful statistical habit for eval work: **compare systems per item, not per aggregate.**
 
 Three equivalent ways to run the paired test:
 
-- **Paired bootstrap**: resample items, compute $\operatorname{mean}(b - a)$ each time. Result for this data (seed 0, 2,000 resamples): difference 0.06, interval (0.01, 0.115), p about 0.03. The unpaired bootstrap on the same data gives (-0.04, 0.16), p about 0.25. [Exercise 01](exercises/ex01_bootstrap_ci.py) builds both.
+- **Paired bootstrap**: resample items, compute $\mathrm{mean}(b - a)$ each time. Result for this data (seed 0, 2,000 resamples): difference 0.06, interval (0.01, 0.115), p about 0.03. The unpaired bootstrap on the same data gives (-0.04, 0.16), p about 0.25. [Exercise 01](exercises/ex01_bootstrap_ci.py) builds both.
 - **McNemar's test** on the discordant counts $b = 20$ and $c = 8$. With continuity correction $\chi^2 = (\lvert 20 - 8 \rvert - 1)^2 / (20 + 8) = 121/28 = 4.32$, $p = 0.038$. The exact version is a binomial test of 20 out of 28 against 0.5, two-sided $p = 0.036$.
 - **Paired t-test** on the per-item scores, appropriate for continuous scores (judge ratings, F1) with enough items.
 

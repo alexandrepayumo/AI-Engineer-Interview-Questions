@@ -60,11 +60,11 @@ The entries sum to zero. The largest magnitude is the true class's entry (-0.910
 
 ### P3. Hand backprop through a ReLU
 
-Let $L = \tfrac{1}{2} \big(\operatorname{relu}(wx + b) - y\big)^2$ with $x = 2$, $w = 1.5$, $b = -1$, $y = 1$. Compute $L$, $\partial L / \partial w$, $\partial L / \partial b$ and $\partial L / \partial x$. Then set $b = -4$ and repeat. What does the second case show?
+Let $L = \tfrac{1}{2} \big(\mathrm{relu}(wx + b) - y\big)^2$ with $x = 2$, $w = 1.5$, $b = -1$, $y = 1$. Compute $L$, $\partial L / \partial w$, $\partial L / \partial b$ and $\partial L / \partial x$. Then set $b = -4$ and repeat. What does the second case show?
 
 <details><summary>Answer</summary>
 
-First case: pre-activation $u = 1.5 \times 2 - 1 = 2$, $r = \operatorname{relu}(u) = 2$, error $= r - y = 1$, $L = 0.5$. Backward: $\partial L / \partial r = \text{error} = 1$. The ReLU passes the gradient because $u \gt 0$, so $\partial L / \partial u = 1$. Then $\partial L / \partial w = 1 \cdot x = 2$, $\partial L / \partial b = 1$, $\partial L / \partial x = 1 \cdot w = 1.5$. Second case: $u = 3 - 4 = -1$, $r = 0$, error $= -1$, $L = 0.5$. The ReLU gate is closed ($u \lt 0$), so $\partial L / \partial u = 0$ and all three gradients are 0, even though the loss is not zero. This is the dead-unit problem: if a unit's pre-activation is negative for every example, it receives no gradient and cannot recover.
+First case: pre-activation $u = 1.5 \times 2 - 1 = 2$, $r = \mathrm{relu}(u) = 2$, error $= r - y = 1$, $L = 0.5$. Backward: $\partial L / \partial r = \text{error} = 1$. The ReLU passes the gradient because $u \gt 0$, so $\partial L / \partial u = 1$. Then $\partial L / \partial w = 1 \cdot x = 2$, $\partial L / \partial b = 1$, $\partial L / \partial x = 1 \cdot w = 1.5$. Second case: $u = 3 - 4 = -1$, $r = 0$, error $= -1$, $L = 0.5$. The ReLU gate is closed ($u \lt 0$), so $\partial L / \partial u = 0$ and all three gradients are 0, even though the loss is not zero. This is the dead-unit problem: if a unit's pre-activation is negative for every example, it receives no gradient and cannot recover.
 
 </details>
 
